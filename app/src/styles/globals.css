@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #020408;
+  --foreground: #f1f5f9;
+  --purple-glow: rgba(139, 92, 246, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle radial gradient on the page background */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(109, 40, 217, 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(76, 29, 149, 0.06) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#__next, main {
+  position: relative;
+  z-index: 1;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+
+/* Glass card utility */
+.glass {
+  background: rgba(17, 24, 39, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Purple glow ring on focus */
+.focus-purple:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.4);
+}
+
+/* Wallet adapter overrides */
+.wallet-adapter-modal-wrapper {
+  background: #0f172a !important;
+  border: 1px solid rgba(139, 92, 246, 0.2) !important;
+  border-radius: 1rem !important;
+}
+.wallet-adapter-button-trigger {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  border-radius: 0.75rem !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  padding: 0 1.25rem !important;
+  height: 2.5rem !important;
+  transition: opacity 0.15s !important;
+}
+.wallet-adapter-button-trigger:hover {
+  opacity: 0.9 !important;
+}

@@ -1,0 +1,643 @@
+{
+  "address": "HFe9PvFPXnsKqGYK75kVcBke98fP94FWD3S1ffVrKFAi",
+  "metadata": {
+    "name": "privybag",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "PrivyBag — ZK-shielded tipping and fee sharing for Bags.fm creators"
+  },
+  "instructions": [
+    {
+      "name": "claim_private_share",
+      "docs": [
+        "Creator withdraws via legacy claim instruction."
+      ],
+      "discriminator": [
+        196,
+        170,
+        1,
+        189,
+        125,
+        222,
+        92,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  118,
+                  121,
+                  98,
+                  97,
+                  103,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "claim_amount_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "configure_private_fee_share",
+      "docs": [
+        "Creator configures private fee-share rules."
+      ],
+      "discriminator": [
+        27,
+        237,
+        254,
+        55,
+        83,
+        45,
+        146,
+        141
+      ],
+      "accounts": [
+        {
+          "name": "fee_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  118,
+                  121,
+                  98,
+                  97,
+                  103,
+                  95,
+                  102,
+                  101,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  118,
+                  121,
+                  98,
+                  97,
+                  103,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "recipients",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "shares_bps",
+          "type": {
+            "vec": "u16"
+          }
+        }
+      ]
+    },
+    {
+      "name": "deposit",
+      "docs": [
+        "Fan deposits SOL into creator's vault PDA.",
+        "Creates the vault on first call (init_if_needed).",
+        "The fan passes `creator` pubkey as an arg — no creator signature needed."
+      ],
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "fan",
+          "docs": [
+            "Fan — signs and pays. Identity NOT stored on-chain."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault PDA — init_if_needed creates it on first deposit.",
+            "Seeds use the creator pubkey passed as an arg, so any fan",
+            "can deposit to any creator's vault without creator co-signing."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  118,
+                  121,
+                  98,
+                  97,
+                  103,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "creator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "creator",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_vault",
+      "docs": [
+        "Creator registers their vault (legacy — deposit now does this via init_if_needed)."
+      ],
+      "discriminator": [
+        48,
+        191,
+        163,
+        44,
+        71,
+        129,
+        63,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  118,
+                  121,
+                  98,
+                  97,
+                  103,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "bags_token_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "shielded_tip",
+      "docs": [
+        "Records aggregate stats (legacy — deposit now handles this internally)."
+      ],
+      "discriminator": [
+        246,
+        116,
+        51,
+        122,
+        92,
+        145,
+        149,
+        233
+      ],
+      "accounts": [
+        {
+          "name": "fee_payer",
+          "docs": [
+            "Fan paying tx fees — identity not stored anywhere"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  118,
+                  121,
+                  98,
+                  97,
+                  103,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.creator",
+                "account": "CreatorVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "tip_amount_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "docs": [
+        "Creator withdraws SOL from their vault PDA.",
+        "Only the registered creator can call this."
+      ],
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  118,
+                  121,
+                  98,
+                  97,
+                  103,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount_lamports",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "CreatorVault",
+      "discriminator": [
+        200,
+        135,
+        38,
+        98,
+        35,
+        236,
+        238,
+        12
+      ]
+    },
+    {
+      "name": "FeeShareConfig",
+      "discriminator": [
+        240,
+        232,
+        7,
+        22,
+        50,
+        198,
+        71,
+        210
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "VaultInactive",
+      "msg": "Creator vault is not active — cannot receive tips"
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "Only the vault creator can perform this action"
+    },
+    {
+      "code": 6002,
+      "name": "ZeroTipAmount",
+      "msg": "Tip amount must be greater than 0 lamports"
+    },
+    {
+      "code": 6003,
+      "name": "TipAmountTooLarge",
+      "msg": "Tip amount exceeds 10 SOL maximum"
+    },
+    {
+      "code": 6004,
+      "name": "RecipientShareMismatch",
+      "msg": "Recipient and shares_bps arrays must have the same length"
+    },
+    {
+      "code": 6005,
+      "name": "SharesExceed100Percent",
+      "msg": "Fee shares must sum to 10,000 bps (100%) or less"
+    },
+    {
+      "code": 6006,
+      "name": "TooManyRecipients",
+      "msg": "Maximum of 5 fee-share recipients allowed"
+    },
+    {
+      "code": 6007,
+      "name": "InsufficientBalance",
+      "msg": "Insufficient unclaimed balance in vault"
+    },
+    {
+      "code": 6008,
+      "name": "ZeroClaimAmount",
+      "msg": "Claim amount must be greater than 0"
+    }
+  ],
+  "types": [
+    {
+      "name": "CreatorVault",
+      "docs": [
+        "Seeds: [b\"privybag_vault\", creator_pubkey]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "docs": [
+              "The Bags creator's wallet (vault owner)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bags_token_mint",
+            "docs": [
+              "Creator's Bags token mint — cross-referenced with Bags SDK"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_received_lamports",
+            "docs": [
+              "Aggregate lamports received (sum only — no per-tip breakdown)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "tip_count",
+            "docs": [
+              "Total private tips received (count only — no sender info)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_claimed_lamports",
+            "docs": [
+              "Lamports claimed so far"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "is_active",
+            "docs": [
+              "Whether vault is open for tips"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Unix timestamp of vault creation"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeShareConfig",
+      "docs": [
+        "Seeds: [b\"privybag_fee_config\", creator_pubkey]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipients",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "shares_bps",
+            "docs": [
+              "Basis points per recipient (1 bps = 0.01%). Must sum ≤ 10_000."
+            ],
+            "type": {
+              "vec": "u16"
+            }
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}
