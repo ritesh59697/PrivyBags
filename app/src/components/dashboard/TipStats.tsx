@@ -52,13 +52,17 @@ export function TipStats({ creatorPublicKey }: TipStatsProps) {
 
     try {
       const sig = await claimCompressedFunds({ publicKey, signTransaction });
-      if (sig) setClaimTx(sig);
+      if (sig) {
+        setClaimTx(sig);
+        refresh();
+      }
     } catch (e: any) {
       if (
         e instanceof AlreadyProcessedError ||
         String(e?.message).includes("already been processed")
       ) {
         setClaimTx("already-confirmed");
+        refresh();
       } else {
         alert(`Claim failed: ${e.message}`);
       }

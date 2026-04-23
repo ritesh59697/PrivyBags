@@ -201,29 +201,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     poll();
     
-    // ── WebSocket Subscription (Production Ready) ────────────────────────────
-    const rpc = getLightRpc();
-    const vaultPda = deriveCreatorVaultAddress(publicKey);
-    
-    console.log("[PrivyBag:notify] Subscribing to vault updates:", vaultPda.toBase58().slice(0, 8));
-    
-    const subId = rpc.onAccountChange(
-      vaultPda,
-      () => {
-        console.log("[PrivyBag:notify] 🔔 Vault account changed, triggering refresh...");
-        poll();
-      },
-      "confirmed"
-    );
+    // ── Production-Safe Polling (Vercel Friendly) ───────────────────────────
+    // We use polling instead of WebSockets for production stability on Vercel,
+    // as WebSocket connections can be flaky in serverless/client environments.
+    const interval = setInterval(() => {
+      if (!cancelled) poll();
+    }, 5_000);
 
-    // Fallback poll (much slower) to ensure compressed balances eventually sync
-    const interval = setInterval(poll, 60_000);
+    console.log("[PrivyBag:notify] Polling started (5s) for:", publicKey.toBase58().slice(0, 8));
 
     return () => {
       cancelled = true;
-      rpc.removeAccountChangeListener(subId);
       clearInterval(interval);
-      console.log("[PrivyBag:notify] Unsubscribed from vault updates.");
+      console.log("[PrivyBag:notify] Polling stopped.");
     };
   }, [publicKey?.toBase58(), connected, addNotification]);
 
