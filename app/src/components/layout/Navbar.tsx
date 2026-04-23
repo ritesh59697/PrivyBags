@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { Shield, Bell, X, Coins, ExternalLink } from "lucide-react";
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useState, useRef, useEffect } from "react";
 import { useNotifications } from "@/providers/NotificationProvider";
@@ -56,15 +57,17 @@ export function Navbar() {
         {/* Logo */}
         <Link
           href="/"
-          className="flex items-center gap-2 font-bold text-base text-white hover:text-purple-300 transition-colors"
+          className="flex items-center gap-2 font-bold text-lg text-white hover:opacity-80 transition-all active:scale-95"
         >
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #7c3aed, #5b21b6)" }}
-          >
-            <Shield className="w-3.5 h-3.5 text-white" />
+          <div className="relative w-8 h-8 rounded-full overflow-hidden">
+            <Image
+              src="/logo.jpg"
+              alt="PrivyBag Logo"
+              fill
+              className="object-cover scale-110"
+            />
           </div>
-          PrivyBag
+          <span className="tracking-tight">PrivyBag</span>
         </Link>
 
         {/* Right side */}

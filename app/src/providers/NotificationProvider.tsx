@@ -200,12 +200,30 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
 
     poll();
-    const interval = setInterval(poll, 5_000);
-    console.log("[PrivyBag:notify] Polling started (5s interval) for:", publicKey.toBase58().slice(0, 8));
+    
+    // ── WebSocket Subscription (Production Ready) ────────────────────────────
+    const rpc = getLightRpc();
+    const vaultPda = deriveCreatorVaultAddress(publicKey);
+    
+    console.log("[PrivyBag:notify] Subscribing to vault updates:", vaultPda.toBase58().slice(0, 8));
+    
+    const subId = rpc.onAccountChange(
+      vaultPda,
+      () => {
+        console.log("[PrivyBag:notify] 🔔 Vault account changed, triggering refresh...");
+        poll();
+      },
+      "confirmed"
+    );
+
+    // Fallback poll (much slower) to ensure compressed balances eventually sync
+    const interval = setInterval(poll, 60_000);
 
     return () => {
       cancelled = true;
+      rpc.removeAccountChangeListener(subId);
       clearInterval(interval);
+      console.log("[PrivyBag:notify] Unsubscribed from vault updates.");
     };
   }, [publicKey?.toBase58(), connected, addNotification]);
 
