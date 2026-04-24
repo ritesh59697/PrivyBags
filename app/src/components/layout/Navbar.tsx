@@ -122,11 +122,11 @@ export function Navbar() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="absolute right-0 mt-3 w-80 rounded-2xl overflow-hidden shadow-2xl z-50"
+                  className="absolute right-[-1rem] md:right-0 mt-5 w-80 sm:w-96 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50"
                   style={{
-                    background: "rgba(10, 8, 20, 0.98)",
-                    border: "1px solid rgba(109,40,217,0.3)",
-                    backdropFilter: "blur(24px)",
+                    background: "rgba(8, 6, 16, 0.95)",
+                    border: "1px solid rgba(139, 92, 246, 0.2)",
+                    backdropFilter: "blur(32px)",
                   }}
                 >
                   {/* Panel header */}

@@ -100,124 +100,134 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     [publicKey]
   );
 
-  // ── Polling ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!connected || !publicKey) {
-      lastTipCount.current = null;
-      lastCombinedTotal.current = null;
-      return;
-    }
+  // ── Polling & Subscriptions ───────────────────────────────────────────────
+  
+  const isPollingRef = useRef(false);
 
-    let cancelled = false;
+  const poll = useCallback(async () => {
+    if (!connected || !publicKey || isPollingRef.current) return;
+    isPollingRef.current = true;
 
-    async function poll() {
-      if (!publicKey || cancelled) return;
+    try {
+      const rpc = getLightRpc();
 
-      try {
-        const rpc = getLightRpc();
+      // ── 1. Vault PDA balance (Anchor flow) ────────────────────────────────
+      const vaultPda = deriveCreatorVaultAddress(publicKey);
+      const accountInfo = await rpc.getAccountInfo(vaultPda);
 
-        // ── 1. Vault PDA balance (Anchor flow) ────────────────────────────────
-        const vaultPda = deriveCreatorVaultAddress(publicKey);
-        const accountInfo = await rpc.getAccountInfo(vaultPda);
+      let tipCount = 0;
+      let vaultReceived = 0;
+      let totalClaimed = 0;
 
-        let tipCount = 0;
-        let vaultReceived = 0;
-
-        if (accountInfo?.data && accountInfo.data.length >= 8 + 32 + 32 + 8 + 8) {
-          const data = Buffer.from(accountInfo.data);
-          vaultReceived = Number(data.readBigUInt64LE(8 + 32 + 32)) / LAMPORTS_PER_SOL;
-          tipCount = Number(data.readBigUInt64LE(8 + 32 + 32 + 8));
-        }
-
-        // ── 2. Compressed wSOL balance (Light Protocol flow) ──────────────────
-        let compressedSol = 0;
-        try {
-          const { getAssociatedTokenAddressInterface, getAtaInterface } =
-            await import("@lightprotocol/compressed-token/unified");
-          const lightAta = getAssociatedTokenAddressInterface(WSOL_MINT, publicKey);
-          const ataInfo = await getAtaInterface(rpc, lightAta, publicKey, WSOL_MINT);
-          compressedSol = Number(ataInfo?.parsed?.amount ?? 0) / LAMPORTS_PER_SOL;
-        } catch {
-          // No compressed balance yet — normal on first use
-        }
-
-        const combinedTotal = vaultReceived + compressedSol;
-
-        // ── 3. Detect Changes & Notify ───────────────────────────────────────
-        
-        // Skip first poll to establish baseline (prevents fake notifications on load)
-        if (lastTipCount.current === null || lastCombinedTotal.current === null) {
-          lastTipCount.current = tipCount;
-          lastCombinedTotal.current = combinedTotal;
-          console.log("[PrivyBag:notify] Baseline established:", combinedTotal.toFixed(5), "SOL");
-          return;
-        }
-
-        const prevTotal = lastCombinedTotal.current;
-        const delta = combinedTotal - prevTotal;
-
-        // Trigger if tip count increased OR balance increased significantly
-        const hasNewTip = tipCount > lastTipCount.current || delta > 0.000_01;
-
-        if (hasNewTip && !cancelled) {
-          // ── 4. Verify it's an INCOMING tip, not a self-operation (Wrap/Claim) ─
-          const sigs = await rpc.getSignaturesForAddress(publicKey, { limit: 1 });
-          const latestSig = sigs[0]?.signature;
-
-          if (latestSig) {
-            const tx = await rpc.getTransaction(latestSig, {
-              maxSupportedTransactionVersion: 0,
-              commitment: "confirmed"
-            });
-
-            const feePayer = tx?.transaction.message.staticAccountKeys[0]?.toBase58();
-            const isSelf = feePayer === publicKey.toBase58();
-
-            if (isSelf) {
-              console.log("[PrivyBag:notify] Skipping self-signed transaction:", latestSig.slice(0, 8));
-            } else {
-              // SUCCESS: Show only the delta (the new tip amount)
-              console.log("[PrivyBag:notify] New Tip! Delta:", delta.toFixed(5));
-              addNotification(delta > 0 ? delta : 0.001, latestSig);
-            }
-          }
-
-          // Update refs for next poll
-          lastTipCount.current = tipCount;
-          lastCombinedTotal.current = combinedTotal;
-        }
-      } catch (err: any) {
-        if (!cancelled) console.warn("[PrivyBag:notify] Poll error:", err.message);
+      if (accountInfo?.data && accountInfo.data.length >= 8 + 32 + 32 + 8 + 8 + 8) {
+        const data = Buffer.from(accountInfo.data);
+        vaultReceived = Number(data.readBigUInt64LE(8 + 32 + 32)) / LAMPORTS_PER_SOL;
+        tipCount = Number(data.readBigUInt64LE(8 + 32 + 32 + 8));
+        totalClaimed = Number(data.readBigUInt64LE(8 + 32 + 32 + 8 + 8)) / LAMPORTS_PER_SOL;
+      } else if (accountInfo) {
+        // Fallback for raw lamports if vault not initialized/parsed
+        vaultReceived = accountInfo.lamports / LAMPORTS_PER_SOL;
       }
-    }
 
-    poll();
+      // ── 2. Compressed Light ATA balance (Light Protocol flow) ──────────────────
+      let compressedSol = 0;
+      let lightAta: PublicKey | null = null;
+      try {
+        const { getAssociatedTokenAddressInterface, getAtaInterface } =
+          await import("@lightprotocol/compressed-token/unified");
+        lightAta = getAssociatedTokenAddressInterface(WSOL_MINT, publicKey);
+        const ataInfo = await getAtaInterface(rpc, lightAta, publicKey, WSOL_MINT);
+        compressedSol = Number(ataInfo?.parsed?.amount ?? 0) / LAMPORTS_PER_SOL;
+      } catch {
+        // No compressed balance yet — normal
+      }
+
+      // ── 3. Combined Total (including claimed to keep delta accurate) ──────────
+      const combinedTotal = vaultReceived + compressedSol + totalClaimed;
+
+      // Skip first poll to establish baseline
+      if (lastTipCount.current === null || lastCombinedTotal.current === null) {
+        lastTipCount.current = tipCount;
+        lastCombinedTotal.current = combinedTotal;
+        console.log("[PrivyBag:notify] Baseline established:", combinedTotal.toFixed(5), "SOL");
+        return;
+      }
+
+      const prevTotal = lastCombinedTotal.current;
+      const delta = combinedTotal - prevTotal;
+
+      // Trigger if tip count increased OR balance increased significantly
+      const hasNewTip = tipCount > (lastTipCount.current ?? 0) || delta > 0.000_01;
+
+      if (hasNewTip) {
+        // ── 4. Verify it's an INCOMING tip, not a self-operation ─────────────
+        const sigs = await rpc.getSignaturesForAddress(publicKey, { limit: 1 });
+        const latestSig = sigs[0]?.signature;
+
+        if (latestSig) {
+          const tx = await rpc.getTransaction(latestSig, {
+            maxSupportedTransactionVersion: 0,
+            commitment: "confirmed"
+          });
+
+          const feePayer = tx?.transaction.message.staticAccountKeys[0]?.toBase58();
+          const isSelf = feePayer === publicKey.toBase58();
+
+          if (!isSelf) {
+            console.log("[PrivyBag:notify] New Tip! Delta:", delta.toFixed(5));
+            // Ensure we never show 0.0000 in the UI
+            const displayAmount = delta > 0.000_01 ? delta : 0.001;
+            addNotification(displayAmount, latestSig);
+          }
+        }
+
+        // Update refs for next poll
+        lastTipCount.current = tipCount;
+        lastCombinedTotal.current = combinedTotal;
+      }
+    } catch (err: any) {
+      console.warn("[PrivyBag:notify] Poll error:", err.message);
+    } finally {
+      isPollingRef.current = false;
+    }
+  }, [connected, publicKey, addNotification]);
+
+  useEffect(() => {
+    if (!connected || !publicKey) return;
+
+    poll(); // Initial poll
     
-    // ── WebSocket Subscription (Production Ready) ────────────────────────────
     const rpc = getLightRpc();
     const vaultPda = deriveCreatorVaultAddress(publicKey);
     
     console.log("[PrivyBag:notify] Subscribing to vault updates:", vaultPda.toBase58().slice(0, 8));
     
-    const subId = rpc.onAccountChange(
-      vaultPda,
-      () => {
-        console.log("[PrivyBag:notify] 🔔 Vault account changed, triggering refresh...");
-        poll();
-      },
-      "confirmed"
-    );
+    // Sub 1: Vault PDA changes (Anchor tips / Claims / Withdraws)
+    const vaultSub = rpc.onAccountChange(vaultPda, () => poll(), "confirmed");
+    
+    // Sub 2: Light ATA changes (Immediate shielded tip detection)
+    let ataSub: number | null = null;
+    (async () => {
+      try {
+        const { getAssociatedTokenAddressInterface } = await import("@lightprotocol/compressed-token/unified");
+        const lightAta = getAssociatedTokenAddressInterface(WSOL_MINT, publicKey);
+        ataSub = rpc.onAccountChange(lightAta, () => poll(), "confirmed");
+        console.log("[PrivyBag:notify] Subscribed to Light ATA updates.");
+      } catch (e) {
+        console.warn("[PrivyBag:notify] Could not subscribe to Light ATA:", e);
+      }
+    })();
 
     // Fallback poll (much slower) to ensure compressed balances eventually sync
     const interval = setInterval(poll, 60_000);
 
     return () => {
-      cancelled = true;
-      rpc.removeAccountChangeListener(subId);
+      rpc.removeAccountChangeListener(vaultSub);
+      if (ataSub !== null) rpc.removeAccountChangeListener(ataSub);
       clearInterval(interval);
-      console.log("[PrivyBag:notify] Unsubscribed from vault updates.");
+      console.log("[PrivyBag:notify] Unsubscribed from updates.");
     };
-  }, [publicKey?.toBase58(), connected, addNotification]);
+  }, [publicKey?.toBase58(), connected, poll]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 

@@ -172,12 +172,51 @@ export async function withdrawFromVault(
 // depositToVault() directly, so this is a no-op.
 
 export async function recordTipInVault(
-  _wallet: WalletAdapterSigner,
-  _creatorPublicKey: PublicKey,
-  _tipAmountLamports: bigint
+  fanWallet: WalletAdapterSigner,
+  creatorPublicKey: PublicKey,
+  tipAmountLamports: bigint
 ): Promise<TransactionSignature | null> {
-  // depositToVault is now called inside sendPrivateTip (shielded-transfer.ts).
-  // This function is kept so existing callers don't break.
-  console.log("[PrivyBag] recordTipInVault: deposit already handled by sendPrivateTip — skipping.");
-  return null;
+  const isProgramDeployed =
+    PRIVYBAG_PROGRAM_ID.toBase58() !== "11111111111111111111111111111111";
+
+  if (!isProgramDeployed) {
+    console.warn("[PrivyBag] Program not deployed — skipping stats recording.");
+    return null;
+  }
+
+  const connection = getLightRpc();
+  const vaultPda = deriveCreatorVaultAddress(creatorPublicKey, PRIVYBAG_PROGRAM_ID);
+  
+  // Verify vault exists before trying to record a shielded tip
+  const vaultInfo = await connection.getAccountInfo(vaultPda);
+  if (!vaultInfo) {
+    console.warn("[PrivyBag] No vault found for creator. First tip must be a direct deposit to initialize the vault.");
+    return null;
+  }
+
+  const program = getProgram(fanWallet);
+
+  console.log(
+    "[PrivyBag:record] Recording shielded tip stats...",
+    "\n  creator: ", creatorPublicKey.toBase58(),
+    "\n  amount:  ", tipAmountLamports.toString(), "lamports"
+  );
+
+  const ix = await program.methods
+    .shieldedTip(new BN(tipAmountLamports.toString()))
+    .accounts({
+      feePayer:      fanWallet.publicKey,
+      vault:         vaultPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+
+  const tx = new Transaction().add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 60_000 }),
+    ix
+  );
+
+  const sig = await signAndSendTx(connection, tx, fanWallet);
+  console.log("[PrivyBag:record] ✅ Stats updated:", sig);
+  return sig;
 }
