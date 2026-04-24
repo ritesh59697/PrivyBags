@@ -593,9 +593,6 @@ export async function runFullTipFlow(
 
   const recipientAta = getAssociatedTokenAddressInterface(WSOL_MINT, creatorPublicKey);
 
-  // Small delay to allow Photon indexer to catch up before UI refreshes
-  await delay(2000);
-
   return {
     success: true,
     wrapSignature: wrapSig,

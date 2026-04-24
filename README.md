@@ -1,40 +1,33 @@
-# PrivyBag 🛡️
+# PrivyBag 🛡️✨
 
-**Private Tipping for Bags Creators on Solana**
+**Private, Shielded Tipping for Bags Creators on Solana**
 
-PrivyBag is a privacy-preserving tipping layer built for the Bags ecosystem. It solves a fundamental transparency issue on public ledgers: when a fan tips a creator directly, their wallet addresses are forever linked on-chain. PrivyBag breaks this link using **Vault PDA Indirection** and **Light Protocol V2 ZK-Compression**.
-
----
-
-## 🚀 Overview
-
-PrivyBag allows fans to support their favorite Bags creators without exposing the direct relationship between their wallets. By utilizing program-derived addresses (PDAs) as intermediate buffers and ZK-shielded transfers, we ensure that:
-1. **Fans** can tip privately without their transaction history pointing directly to a creator's main wallet.
-2. **Creators** can manage and claim their aggregate tips securely through a dedicated dashboard.
-
-[Live Demo](https://your-deployed-link.vercel.app) | [Video Walkthrough](not uploaded yet)
+PrivyBag is a premium, privacy-preserving tipping layer built specifically for the **Bugs Hackathon**. It solves the core transparency problem of public blockchains: when a fan tips a creator, their wallets are permanently linked on-chain. PrivyBag breaks this link using **Vault PDA Indirection** and **Light Protocol ZK-Compression**.
 
 ---
 
-## ✨ Features
+## 🚀 Key Highlights
 
-- **Bags Integration**: Seamlessly lookup any Bags creator by their Twitter handle or wallet address.
-- **Privacy-First Architecture**: Tips are routed through a secure Vault PDA, decoupling the sender from the recipient.
-- **ZK-Shielded Flow**: Leverages Light Protocol V2 to wrap SOL into compressed tokens for shielded transfers.
-- **Creator Dashboard**: A private interface for creators to view aggregate tip statistics, receive notifications, and claim funds.
-- **Native Experience**: Fully compatible with standard Solana browser wallets (Phantom, Solflare, etc.).
+*   🛡️ **Zero-Trace Tipping**: Breaks the direct on-chain link between Fans and Creators.
+*   ⚡ **Real-Time Reactivity**: High-performance WebSocket subscriptions (`onAccountChange`) for instant tip notifications.
+*   🎭 **Premium UX**: Modern, animated interface built with Next.js 15, Framer Motion, and boutique Tailwind styling.
+*   🌑 **ZK-Shielding**: Leverages Light Protocol V2 to hide transaction amounts and sender identities.
+*   📊 **Creator Dashboard**: Private aggregate statistics and secure, multi-stage claiming flow.
 
 ---
 
 ## 🛠 How It Works
 
-PrivyBag implements a two-layer privacy model:
+PrivyBag implements a unique **Hybrid Privacy Model** to balance transparency for creators and anonymity for fans.
 
-1. **The Vault Layer (Anchor)**:
-   Instead of a direct transfer, tips are sent to a **CreatorVault PDA**. This program-owned account acts as a "shielding buffer." The fan interacts with the program, and the creator later interacts with the program to withdraw. No single transaction on-chain shows `Fan Wallet → Creator Wallet`.
+### 1. The Fan Side (Shielding)
+When you send a tip, your SOL is routed through a **CreatorVault PDA**. This program-owned account acts as a "privacy buffer." On-chain, your wallet is seen interacting with the PrivyBag program—not the creator's personal wallet.
 
-2. **The Shielded Layer (Light Protocol)**:
-   For enhanced privacy, the tip can be "compressed" into a ZK-account. This uses Light Protocol's ZK-compression to ensure the specific amount and balance are hidden from public indexers, providing a higher level of financial privacy for the creator.
+### 2. The Creator Side (Aggregation)
+Creators see their tips land in their private dashboard in real-time. Tips are stored as **ZK-Compressed accounts** (via Light Protocol) or native SOL in a program-managed vault.
+
+### 3. The Claim Flow (Decoupling)
+To receive funds, the creator "Claims" their tips. This triggers a separate transaction that moves funds from the Vault PDA to their wallet. Since the Fan-to-Vault and Vault-to-Creator transactions happen at different times, the on-chain link is effectively broken.
 
 ---
 
@@ -53,13 +46,30 @@ privybag/
 
 ---
 
+## ✨ Features
+
+### 🔍 Smart Search
+Seamlessly lookup any Bags creator by their **Twitter/X handle**. Our integration resolves handle-to-wallet mapping instantly, allowing you to tip creators even if you only know their social profile.
+
+### 🔔 Real-Time Notifications
+Never miss a tip. Our `NotificationProvider` uses Solana WebSockets to alert creators the millisecond a tip hits their vault, complete with delta calculation (showing the exact new tip amount).
+
+### 🎨 Boutique Design
+A hand-crafted UI featuring:
+- **Animated Splash Screen**: A premium reveal experience on first load.
+- **Micro-interactions**: Spring-based animations and smooth transitions for every click.
+- **Glassmorphism**: A sleek, dark-mode aesthetic with vibrant purple and green accents.
+
+---
+
 ## 💻 Tech Stack
 
-- **Smart Contract**: Anchor Framework (Rust)
-- **Privacy Layer**: Light Protocol V2 (ZK-Compression)
-- **Frontend**: Next.js 15, TypeScript, Tailwind CSS
-- **Solana Integration**: @solana/web3.js, @solana/wallet-adapter
-- **Data Source**: Bags Public API (v2)
+- **Framework**: Next.js 15 (App Router)
+- **Animations**: Framer Motion
+- **Styling**: Tailwind CSS
+- **Smart Contract**: Solana Anchor (Rust)
+- **Privacy**: Light Protocol V2 (ZK-Compression)
+- **Wallets**: @solana/wallet-adapter (Phantom, Solflare, etc.)
 
 ---
 
@@ -89,15 +99,16 @@ To run the project locally:
 
 ## 📋 Submission Info
 
-- **Current Status**: Functional prototype deployed on **Solana Devnet**.
+- **Hackathon**: Bags Hackathon (2026)
+- **Status**: Production-Ready Prototype
 - **Devnet Program ID**: `HFe9PvFPXnsKqGYK75kVcBke98fP94FWD3S1ffVrKFAi`
-- **Hackathon**: The Bags Hackathon (2026)
+- **RPC Support**: Optimized for high-frequency WebSocket updates.
 
 ---
 
 ## ⚖️ Implementation Note
 
-PrivyBag is currently optimized for **Solana Devnet**. The implementation utilizes a hybrid model of Vault PDAs for transparency in aggregate stats and Light Protocol for shielded balance management. Future iterations will focus on fully private cross-program invocations (CPI) and mainnet-ready fee-share integrations.
+PrivyBag is optimized for **Solana Devnet**. It demonstrates a scalable path toward financial privacy on Solana, moving away from simple public transfers toward a world where your support for creators doesn't have to be your public transaction history.
 
 ---
 

@@ -143,31 +143,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
         const combinedTotal = vaultReceived + compressedSol;
 
-        console.log(
-          `[PrivyBag:notify] Poll — vault: ${vaultReceived.toFixed(5)} SOL,`,
-          `compressed: ${compressedSol.toFixed(5)} SOL,`,
-          `tipCount: ${tipCount}`
-        );
-
-        // First poll — establish baseline, do NOT fire notification
+        // ── 3. Detect Changes & Notify ───────────────────────────────────────
+        
+        // Skip first poll to establish baseline (prevents fake notifications on load)
         if (lastTipCount.current === null || lastCombinedTotal.current === null) {
           lastTipCount.current = tipCount;
           lastCombinedTotal.current = combinedTotal;
-          console.log("[PrivyBag:notify] Baseline set —", combinedTotal.toFixed(5), "SOL,", tipCount, "tips");
+          console.log("[PrivyBag:notify] Baseline established:", combinedTotal.toFixed(5), "SOL");
           return;
         }
 
         const prevTotal = lastCombinedTotal.current;
-        const tipCountUp = tipCount > lastTipCount.current;
-        // Only fire if balance increased by more than a rounding threshold
-        const balanceUp = combinedTotal > prevTotal + 0.000_01;
+        const delta = combinedTotal - prevTotal;
 
-        if ((tipCountUp || balanceUp) && !cancelled) {
-          const delta = combinedTotal - prevTotal;
+        // Trigger if tip count increased OR balance increased significantly
+        const hasNewTip = tipCount > lastTipCount.current || delta > 0.000_01;
 
-          // ── 3. Verify it's an INCOMING tip, not a self-operation (Wrap/Claim) ─
-          // We fetch the latest signature for the wallet.
-          // If the fee payer is the current wallet, it's an internal operation.
+        if (hasNewTip && !cancelled) {
+          // ── 4. Verify it's an INCOMING tip, not a self-operation (Wrap/Claim) ─
           const sigs = await rpc.getSignaturesForAddress(publicKey, { limit: 1 });
           const latestSig = sigs[0]?.signature;
 
@@ -181,16 +174,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             const isSelf = feePayer === publicKey.toBase58();
 
             if (isSelf) {
-              console.log("[PrivyBag:notify] Skipping internal operation (User is signer):", latestSig.slice(0, 8));
+              console.log("[PrivyBag:notify] Skipping self-signed transaction:", latestSig.slice(0, 8));
             } else {
-              console.log("[PrivyBag:notify] Incoming tip detected! +", delta.toFixed(5), "SOL");
-              addNotification(
-                delta > 0.000_01 ? delta : (compressedSol > 0 ? compressedSol : 0.001),
-                latestSig
-              );
+              // SUCCESS: Show only the delta (the new tip amount)
+              console.log("[PrivyBag:notify] New Tip! Delta:", delta.toFixed(5));
+              addNotification(delta > 0 ? delta : 0.001, latestSig);
             }
           }
 
+          // Update refs for next poll
           lastTipCount.current = tipCount;
           lastCombinedTotal.current = combinedTotal;
         }
@@ -201,19 +193,29 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     poll();
     
-    // ── Production-Safe Polling (Vercel Friendly) ───────────────────────────
-    // We use polling instead of WebSockets for production stability on Vercel,
-    // as WebSocket connections can be flaky in serverless/client environments.
-    const interval = setInterval(() => {
-      if (!cancelled) poll();
-    }, 5_000);
+    // ── WebSocket Subscription (Production Ready) ────────────────────────────
+    const rpc = getLightRpc();
+    const vaultPda = deriveCreatorVaultAddress(publicKey);
+    
+    console.log("[PrivyBag:notify] Subscribing to vault updates:", vaultPda.toBase58().slice(0, 8));
+    
+    const subId = rpc.onAccountChange(
+      vaultPda,
+      () => {
+        console.log("[PrivyBag:notify] 🔔 Vault account changed, triggering refresh...");
+        poll();
+      },
+      "confirmed"
+    );
 
-    console.log("[PrivyBag:notify] Polling started (5s) for:", publicKey.toBase58().slice(0, 8));
+    // Fallback poll (much slower) to ensure compressed balances eventually sync
+    const interval = setInterval(poll, 60_000);
 
     return () => {
       cancelled = true;
+      rpc.removeAccountChangeListener(subId);
       clearInterval(interval);
-      console.log("[PrivyBag:notify] Polling stopped.");
+      console.log("[PrivyBag:notify] Unsubscribed from vault updates.");
     };
   }, [publicKey?.toBase58(), connected, addNotification]);
 

@@ -7,6 +7,8 @@ import { WalletProvider } from "@/providers/WalletProvider";
 import { NotificationProvider } from "@/providers/NotificationProvider";
 import { Navbar } from "@/components/layout/Navbar";
 
+import { SplashProvider } from "@/providers/SplashProvider";
+
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
@@ -30,8 +32,10 @@ export default function RootLayout({
       <body className={`${inter.variable} bg-gray-950 text-white antialiased`}>
         <WalletProvider>
           <NotificationProvider>
-            <Navbar />
-            <main className="min-h-screen">{children}</main>
+            <SplashProvider>
+              <Navbar />
+              <main className="min-h-screen">{children}</main>
+            </SplashProvider>
           </NotificationProvider>
         </WalletProvider>
       </body>

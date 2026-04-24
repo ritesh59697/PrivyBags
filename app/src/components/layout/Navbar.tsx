@@ -7,6 +7,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useState, useRef, useEffect } from "react";
 import { useNotifications } from "@/providers/NotificationProvider";
+import { motion, AnimatePresence } from "framer-motion";
 
 const WalletMultiButton = dynamic(
   () => import("@solana/wallet-adapter-react-ui").then((mod) => mod.WalletMultiButton),
@@ -32,7 +33,6 @@ export function Navbar() {
   const handleBellClick = () => {
     setOpen((v) => !v);
     if (!open && unreadCount > 0) {
-      // Mark as read when panel opens
       setTimeout(markAllRead, 800);
     }
   };
@@ -53,43 +53,45 @@ export function Navbar() {
         borderBottom: "1px solid rgba(255,255,255,0.05)",
       }}
     >
-      <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
-        <Link
-          href="/"
-          className="flex items-center gap-2 font-bold text-lg text-white hover:opacity-80 transition-all active:scale-95"
-        >
-          <div className="relative w-8 h-8 rounded-full overflow-hidden">
+        <Link href="/" className="group flex items-center gap-3 active:scale-95 transition-transform">
+          <motion.div 
+            whileHover={{ scale: 1.1, rotate: 5 }}
+            className="relative w-9 h-9 rounded-full overflow-hidden border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+          >
             <Image
               src="/logo.jpg"
               alt="PrivyBag Logo"
               fill
-              className="object-cover scale-110"
+              className="object-cover scale-110 group-hover:scale-125 transition-transform duration-500"
             />
+          </motion.div>
+          <div className="flex flex-col leading-none">
+            <span className="font-black text-lg tracking-tighter text-white">PRIVYBAG</span>
+            <span className="text-[10px] font-bold text-purple-500/80 tracking-widest uppercase">Shielded Tips</span>
           </div>
-          <span className="tracking-tight">PrivyBag</span>
         </Link>
 
         {/* Right side */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <Link
             href="/dashboard"
-            className="text-sm text-gray-400 hover:text-white transition-colors hidden sm:block"
+            className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors hidden sm:block"
           >
             Dashboard
           </Link>
 
           {/* ── Notification Bell ──────────────────────────────────────── */}
           <div className="relative" ref={panelRef}>
-            <button
-              id="navbar-notification-bell"
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={handleBellClick}
-              aria-label={unreadCount > 0 ? `${unreadCount} new tip(s)` : "Notifications"}
-              title={unreadCount > 0 ? `${unreadCount} new tip(s)` : "Notifications"}
-              className="relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 hover:bg-white/5"
+              className="relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200"
               style={{
-                background: "rgba(109,40,217,0.12)",
-                border: "1px solid rgba(109,40,217,0.25)",
+                background: "rgba(109,40,217,0.1)",
+                border: "1px solid rgba(109,40,217,0.2)",
               }}
             >
               <Bell
@@ -97,134 +99,118 @@ export function Navbar() {
                   unreadCount > 0 ? "text-purple-300" : "text-purple-400"
                 }`}
               />
-              {/* Red dot — no shake, just a clean professional indicator */}
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-                </span>
-              )}
-            </button>
+              <AnimatePresence>
+                {unreadCount > 0 && (
+                  <motion.span 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    className="absolute -top-1 -right-1 flex h-3 w-3"
+                  >
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500 border-2 border-black" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
 
             {/* ── Dropdown Panel ─────────────────────────────────────── */}
-            {open && (
-              <div
-                className="absolute right-0 mt-2 w-80 rounded-2xl overflow-hidden shadow-2xl"
-                style={{
-                  background: "rgba(10, 8, 20, 0.97)",
-                  border: "1px solid rgba(109,40,217,0.3)",
-                  backdropFilter: "blur(20px)",
-                  animation: "fadeSlideDown 0.18s ease",
-                }}
-              >
-                {/* Panel header */}
-                <div
-                  className="flex items-center justify-between px-4 py-3"
-                  style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+            <AnimatePresence>
+              {open && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute right-0 mt-3 w-80 rounded-2xl overflow-hidden shadow-2xl z-50"
+                  style={{
+                    background: "rgba(10, 8, 20, 0.98)",
+                    border: "1px solid rgba(109,40,217,0.3)",
+                    backdropFilter: "blur(24px)",
+                  }}
                 >
-                  <div className="flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-purple-400" />
-                    <span className="text-sm font-semibold text-white">Tip Alerts</span>
-                    {unreadCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400">
-                        {unreadCount} new
-                      </span>
+                  {/* Panel header */}
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-purple-400" />
+                      <span className="text-xs font-black uppercase tracking-widest text-white">Alerts</span>
+                      {unreadCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-green-500/20 text-green-400 uppercase">
+                          {unreadCount} New
+                        </span>
+                      )}
+                    </div>
+                    <button onClick={() => setOpen(false)} className="text-gray-600 hover:text-white transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Notification list */}
+                  <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                    {notifications.length === 0 ? (
+                      <div className="flex flex-col items-center gap-3 py-10 px-6 text-center">
+                        <div className="w-12 h-12 rounded-full bg-gray-900 flex items-center justify-center">
+                          <Bell className="w-6 h-6 text-gray-700" />
+                        </div>
+                        <p className="text-xs font-bold uppercase tracking-widest text-gray-600">No new tips</p>
+                      </div>
+                    ) : (
+                      notifications.map((n, idx) => (
+                        <motion.div
+                          key={n.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className="flex items-start gap-3 px-5 py-4 transition-colors hover:bg-white/[0.03] border-b border-white/5 last:border-0"
+                          style={{
+                            background: n.read ? "transparent" : "rgba(34,197,94,0.02)",
+                          }}
+                        >
+                          <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center mt-0.5 bg-green-500/10 border border-green-500/20">
+                            <Coins className="w-4 h-4 text-green-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white font-bold tracking-tight">New Tip Received!</p>
+                            {n.receivedSol > 0 && (
+                              <p className="text-xs font-black text-green-400 mt-1">
+                                +{n.receivedSol.toFixed(4)} SOL
+                              </p>
+                            )}
+                            <p className="text-[10px] font-bold text-gray-600 mt-1 uppercase tracking-tighter">
+                              {formatTime(n.timestamp)} · Shielded Transfer
+                            </p>
+                          </div>
+                          <button onClick={() => dismiss(n.id)} className="text-gray-700 hover:text-red-400 transition-colors mt-0.5">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </motion.div>
+                      ))
                     )}
                   </div>
-                  <button
-                    onClick={() => setOpen(false)}
-                    className="text-gray-600 hover:text-gray-400 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
 
-                {/* Notification list */}
-                <div className="max-h-72 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <div className="flex flex-col items-center gap-3 py-8 px-4 text-center">
-                      <Bell className="w-8 h-8 text-gray-700" />
-                      <p className="text-sm text-gray-500">No tips received yet.</p>
-                      <p className="text-xs text-gray-700">
-                        We'll ping you here when a fan tips your vault.
-                      </p>
-                    </div>
-                  ) : (
-                    notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-white/[0.03]"
-                        style={{
-                          borderBottom: "1px solid rgba(255,255,255,0.04)",
-                          background: n.read ? "transparent" : "rgba(34,197,94,0.04)",
-                        }}
+                  {/* Panel footer */}
+                  {notifications.length > 0 && (
+                    <div className="flex items-center justify-between px-5 py-3.5 bg-black/40 border-t border-white/5">
+                      <button onClick={markAllRead} className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
+                        Mark All Read
+                      </button>
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors"
                       >
-                        <div
-                          className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center mt-0.5"
-                          style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.25)" }}
-                        >
-                          <Coins className="w-4 h-4 text-green-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white font-medium">
-                            🎉 New tip received!
-                          </p>
-                          {n.receivedSol > 0 && (
-                            <p className="text-xs text-green-400 mt-0.5">
-                              +{n.receivedSol.toFixed(4)} SOL to your vault
-                            </p>
-                          )}
-                          <p className="text-[11px] text-gray-600 mt-1">
-                            {formatTime(n.timestamp)} · Private · Vault PDA
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => dismiss(n.id)}
-                          className="flex-shrink-0 text-gray-700 hover:text-gray-500 transition-colors mt-0.5"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))
+                        Dashboard <ExternalLink className="w-3 h-3" />
+                      </Link>
+                    </div>
                   )}
-                </div>
-
-                {/* Panel footer */}
-                {notifications.length > 0 && (
-                  <div
-                    className="flex items-center justify-between px-4 py-2.5"
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-                  >
-                    <button
-                      onClick={markAllRead}
-                      className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                    >
-                      Mark all read
-                    </button>
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setOpen(false)}
-                      className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                    >
-                      Go to Dashboard <ExternalLink className="w-3 h-3" />
-                    </Link>
-                  </div>
-                )}
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          {/* ────────────────────────────────────────────────────────────── */}
 
           <WalletMultiButton />
         </div>
       </div>
-
-      <style>{`
-        @keyframes fadeSlideDown {
-          from { opacity: 0; transform: translateY(-6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </nav>
   );
 }

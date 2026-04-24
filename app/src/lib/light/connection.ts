@@ -16,20 +16,13 @@ export function getLightRpc(): Rpc {
   if (_rpc) return _rpc;
 
   const endpoint = process.env.NEXT_PUBLIC_RPC_URL;
-  const compressionEndpoint = process.env.NEXT_PUBLIC_COMPRESSION_RPC_URL || endpoint;
-
   if (!endpoint) {
-    console.error("[PrivyBag] NEXT_PUBLIC_RPC_URL is missing!");
     throw new Error(
       "[PrivyBag] NEXT_PUBLIC_RPC_URL is not set. Add your Helius key to .env.local"
     );
   }
 
-  console.log("[PrivyBag:rpc] Connecting to:", endpoint.slice(0, 30) + "...");
-  
   // createRpc(solanaRpcUrl, photonIndexerUrl, proverUrl)
-  // For Helius, the indexer and prover are usually accessible on the same main endpoint,
-  // but we allow a specialized compressionEndpoint for custom setups.
-  _rpc = createRpc(endpoint, compressionEndpoint, compressionEndpoint);
+  _rpc = createRpc(endpoint, endpoint, endpoint);
   return _rpc;
 }

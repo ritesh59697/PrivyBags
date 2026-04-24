@@ -183,17 +183,33 @@ export function useCreatorDashboard(
     // Initial fetch
     fetchStats();
 
-    // ── Production-Safe Polling (Vercel Friendly) ────────────────────────────
+    // ── WebSocket Subscription (Production Ready) ────────────────────────────
+    const rpc = getLightRpc();
+    if (!creatorPublicKey) return;
+    const vaultPda = deriveCreatorVaultAddress(creatorPublicKey);
+
+    console.log("[useCreatorDashboard] Subscribing to vault updates:", vaultPda.toBase58().slice(0, 8));
+
+    const subId = rpc.onAccountChange(
+      vaultPda,
+      () => {
+        console.log("[useCreatorDashboard] 🔔 Vault changed, refreshing dashboard...");
+        fetchStats();
+      },
+      "confirmed"
+    );
+
+    // Fallback polling (slower) for compressed balances
     if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      fetchStats();
-    }, 8_000);
+    intervalRef.current = setInterval(fetchStats, 60_000);
 
     return () => {
+      rpc.removeAccountChangeListener(subId);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      console.log("[useCreatorDashboard] Unsubscribed from vault updates.");
     };
   }, [fetchStats, creatorPublicKey?.toBase58()]);
 
