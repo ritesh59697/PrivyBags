@@ -61,7 +61,7 @@ export function Navbar() {
             className="relative w-9 h-9 rounded-full overflow-hidden border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
           >
             <Image
-              src="/logo.jpg"
+              src="/logo.png"
               alt="PrivyBag Logo"
               fill
               className="object-cover scale-110 group-hover:scale-125 transition-transform duration-500"

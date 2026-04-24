@@ -41,7 +41,7 @@ export function SplashScreen() {
           
           <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl shadow-purple-500/20">
             <Image
-              src="/logo.jpg"
+              src="/logo.png"
               alt="PrivyBag Logo"
               fill
               className="object-cover scale-110"
