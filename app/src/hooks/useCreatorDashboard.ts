@@ -158,14 +158,22 @@ export function useCreatorDashboard(
         // No compressed balance — normal on first use
       }
 
-      // ── 3. Total Received (stable formula) ───────────────────────────────
-      // compressedSol and totalClaimed are COMPLEMENTARY:
-      //   • Before claim: compressedSol = tip amount, totalClaimed = 0
-      //   • After claim:  compressedSol = 0,          totalClaimed = tip amount
-      // Their sum is always the correct historical total regardless of claim state.
-      // We do NOT add vaultSol here because after a claim the vault only holds
-      // rent-exempt lamports, which would distort the total.
-      const totalReceivedSol = compressedSol + totalClaimed;
+      // ── 3. Total Received (stable, monotonic formula) ─────────────────────
+      // compressedSol and totalClaimed are complementary:
+      //   Before claim: compressedSol = tip amount, totalClaimed = 0
+      //   After claim:  compressedSol = 0, totalClaimed = tip amount
+      //                 (IF claimPrivateShare succeeded)
+      //
+      // PROBLEM: If the vault PDA is not initialized, claimPrivateShare
+      // fails and totalClaimed stays 0. After the claim unwrap, both are 0.
+      //
+      // FIX: Use prevTotalRef as a floor. totalReceivedSol can NEVER
+      // decrease within a session. Once we've seen 0.05 SOL, we always
+      // show at least 0.05 SOL — even after a claim drains the balance.
+      const rawTotal = compressedSol + totalClaimed;
+      const totalReceivedSol = prevTotalRef.current !== null
+        ? Math.max(rawTotal, prevTotalRef.current)
+        : rawTotal;
 
       const newStats: CreatorStats = {
         tipCount,
@@ -377,8 +385,38 @@ export function useCreatorDashboard(
           await claimPrivateShare(wallet, BigInt(amountLamports));
           console.log("[useCreatorDashboard] Historical claim recorded in Vault PDA.");
         } catch (e: any) {
-          // Non-fatal — stats may lag one poll cycle but will self-correct
-          console.warn("[useCreatorDashboard] Could not record claim in Vault PDA (non-fatal):", e.message);
+          // Non-fatal — the vault may not be initialized (creator received
+          // compressed tips without ever going through the deposit flow).
+          // We handle this with an optimistic UI update below.
+          console.warn("[useCreatorDashboard] Vault PDA not initialized — skipping on-chain record (non-fatal):", e.message);
+        }
+
+        // 5. Optimistic UI update — apply the correct post-claim state
+        // IMMEDIATELY, before waiting for the indexer. This is critical when
+        // claimPrivateShare fails (vault not initialized) because fetchStats
+        // would return all zeros without this floor.
+        const preClaimStats = statsRef.current;
+        if (preClaimStats) {
+          const newTotalClaimed = preClaimStats.totalClaimedSol + currentCompressed;
+          const newTotalReceived = Math.max(
+            preClaimStats.totalReceivedSol,
+            newTotalClaimed  // compressedSol is now 0, claimed is now this
+          );
+          const optimistic: CreatorStats = {
+            ...preClaimStats,
+            compressedSol: 0,
+            unclaimedSol: 0,
+            totalClaimedSol: newTotalClaimed,
+            totalReceivedSol: newTotalReceived,
+          };
+          // Update the floor so fetchStats respects this value
+          prevTotalRef.current = newTotalReceived;
+          statsRef.current = optimistic;
+          setStats(optimistic);
+          console.log("[useCreatorDashboard] Optimistic stats applied:",
+            "received=", newTotalReceived.toFixed(5),
+            "claimed=", newTotalClaimed.toFixed(5)
+          );
         }
 
         // Retry fetchStats up to 3 times (Photon indexer can lag up to 6s)
