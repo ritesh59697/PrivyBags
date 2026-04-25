@@ -165,6 +165,42 @@ export async function withdrawFromVault(
   return sig;
 }
 
+// ── claimPrivateShare ────────────────────────────────────────────────────────
+//
+// After a creator claims/unwraps their Light Protocol compressed balance,
+// they should call this to record the historical claim in the Vault PDA stats.
+// This ensures "Total Received" stays accurate even after the balance is unwrapped.
+export async function claimPrivateShare(
+  creatorWallet: WalletAdapterSigner,
+  amountLamports: bigint
+): Promise<TransactionSignature> {
+  const connection = getLightRpc();
+  const vaultPda = deriveCreatorVaultAddress(creatorWallet.publicKey, PRIVYBAG_PROGRAM_ID);
+  const program = getProgram(creatorWallet);
+
+  console.log(
+    "[PrivyBag:recordClaim] Recording historical claim...",
+    "\n  vault:  ", vaultPda.toBase58(),
+    "\n  amount: ", amountLamports.toString(), "lamports"
+  );
+
+  const ix = await program.methods
+    .claimPrivateShare(new BN(amountLamports.toString()))
+    .accounts({
+      vault:         vaultPda,
+      creator:       creatorWallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+
+  const tx = new Transaction().add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 60_000 }),
+    ix
+  );
+
+  return await signAndSendTx(connection, tx, creatorWallet);
+}
+
 // ── recordTipInVault (legacy — points to depositToVault) ─────────────────────
 //
 // Kept for backward compat with usePrivateTip.ts / runFullTipFlow.
