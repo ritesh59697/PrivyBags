@@ -158,7 +158,14 @@ export function useCreatorDashboard(
         // No compressed balance — normal on first use
       }
 
-      const totalReceivedSol = compressedSol + vaultSol + totalClaimed;
+      // ── 3. Total Received (stable formula) ───────────────────────────────
+      // compressedSol and totalClaimed are COMPLEMENTARY:
+      //   • Before claim: compressedSol = tip amount, totalClaimed = 0
+      //   • After claim:  compressedSol = 0,          totalClaimed = tip amount
+      // Their sum is always the correct historical total regardless of claim state.
+      // We do NOT add vaultSol here because after a claim the vault only holds
+      // rent-exempt lamports, which would distort the total.
+      const totalReceivedSol = compressedSol + totalClaimed;
 
       const newStats: CreatorStats = {
         tipCount,
@@ -340,22 +347,41 @@ export function useCreatorDashboard(
           const { blockhash } = await rpc.getLatestBlockhash();
           tx.recentBlockhash = blockhash;
           tx.feePayer = wallet.publicKey;
-          finalSig = await signAndSendTx(rpc, tx, wallet);
-          console.log(`[useCreatorDashboard] Batch ${i + 1} confirmed:`, finalSig);
+
+          try {
+            finalSig = await signAndSendTx(rpc, tx, wallet);
+            console.log(`[useCreatorDashboard] Batch ${i + 1} confirmed:`, finalSig);
+          } catch (batchErr: any) {
+            // If this batch was already processed (e.g. user re-clicked),
+            // recover the sig and continue — do NOT bail out to outer catch.
+            // This is critical so claimPrivateShare still runs below.
+            if (
+              batchErr instanceof AlreadyProcessedError ||
+              batchErr?.name === "AlreadyProcessedError" ||
+              String(batchErr?.message).includes("already been processed")
+            ) {
+              finalSig = batchErr.signature ?? null;
+              console.log(`[useCreatorDashboard] Batch ${i + 1} already confirmed, sig:`, finalSig?.slice(0, 8));
+              // continue to next batch (or fall through to claimPrivateShare)
+            } else {
+              throw batchErr; // real error — propagate
+            }
+          }
         }
 
-        // 4. Record the claim in the Anchor Vault PDA for historical stats
+        // 4. Record the claim in the Anchor Vault PDA for historical stats.
+        // This MUST run even if batches were already-processed, so that
+        // total_claimed_lamports is updated and the dashboard shows correctly.
         try {
           const { claimPrivateShare } = await import("@/lib/anchor/privybag-client");
           await claimPrivateShare(wallet, BigInt(amountLamports));
           console.log("[useCreatorDashboard] Historical claim recorded in Vault PDA.");
         } catch (e: any) {
+          // Non-fatal — stats may lag one poll cycle but will self-correct
           console.warn("[useCreatorDashboard] Could not record claim in Vault PDA (non-fatal):", e.message);
         }
 
-        // Fix 3: Retry fetchStats up to 3 times with 2s gaps.
-        // The Photon indexer can take up to 6s to reflect a new state.
-        // A single 2s delay was not enough in production.
+        // Retry fetchStats up to 3 times (Photon indexer can lag up to 6s)
         console.log("[useCreatorDashboard] ✅ Claim complete. Polling indexer...");
         for (let attempt = 1; attempt <= 3; attempt++) {
           await new Promise(r => setTimeout(r, 2000));
