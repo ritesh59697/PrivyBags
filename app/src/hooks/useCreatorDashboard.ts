@@ -94,7 +94,8 @@ export interface UseCreatorDashboardReturn {
 // We persist the running claimed total in localStorage, keyed by creator pubkey.
 // This survives page refreshes and accumulates correctly across multiple claims.
 
-const LS_KEY = (pk: string) => `pb_claimed_${pk}`;
+const LS_KEY     = (pk: string) => `pb_claimed_${pk}`;
+const LS_TIP_KEY = (pk: string) => `pb_tips_${pk}`;
 
 function getPersistedClaimed(pk: string): number {
   if (typeof window === "undefined") return 0;
@@ -117,6 +118,28 @@ function addPersistedClaimed(pk: string, amount: number): number {
     return next;
   } catch {
     return amount;
+  }
+}
+
+function getPersistedTipCount(pk: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const v = localStorage.getItem(LS_TIP_KEY(pk));
+    return v ? parseInt(v, 10) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function addPersistedTipCount(pk: string, delta = 1): number {
+  if (typeof window === "undefined") return delta;
+  try {
+    const prev = getPersistedTipCount(pk);
+    const next = prev + delta;
+    localStorage.setItem(LS_TIP_KEY(pk), String(next));
+    return next;
+  } catch {
+    return delta;
   }
 }
 
@@ -195,8 +218,11 @@ export function useCreatorDashboard(
       // Use on-chain totalClaimed if vault is initialized, otherwise fall back
       // to localStorage. This handles the common case where claimPrivateShare
       // fails (vault never initialized) and totalClaimed stays 0 on-chain.
-      const storedClaimed = getPersistedClaimed(creatorPublicKey.toBase58());
+      const storedClaimed  = getPersistedClaimed(creatorPublicKey.toBase58());
       const effectiveClaimed = Math.max(totalClaimed, storedClaimed);
+      const storedTipCount   = getPersistedTipCount(creatorPublicKey.toBase58());
+      // Use whichever is higher — on-chain (if vault initialized) or local counter
+      const effectiveTipCount = Math.max(tipCount, storedTipCount);
 
       // totalReceivedSol = current unclaimed + lifetime claimed
       // This always gives the correct historical total regardless of claim state.
@@ -207,7 +233,7 @@ export function useCreatorDashboard(
         : rawTotal;
 
       const newStats: CreatorStats = {
-        tipCount,
+        tipCount: effectiveTipCount,
         totalClaimedSol: effectiveClaimed,   // show localStorage value if vault uninitialized
         isActive,
         compressedSol,
@@ -421,14 +447,13 @@ export function useCreatorDashboard(
           console.warn("[useCreatorDashboard] Vault PDA not initialized — skipping on-chain record (non-fatal):", e.message);
         }
 
-        // 5. Persist to localStorage BEFORE the optimistic update.
-        // This is the key fix: localStorage accumulates correctly across multiple
-        // claims. preClaimStats.totalClaimedSol would always be 0 (vault
-        // uninitialized), so we can't use it as the accumulator base.
+        // 5. Persist claimed amount + increment tip counter in localStorage.
         const newStoredClaimed = addPersistedClaimed(
           creatorPublicKey.toBase58(),
           currentCompressed
         );
+        // Each claim represents at least 1 tip batch — increment the counter.
+        addPersistedTipCount(creatorPublicKey.toBase58(), 1);
 
         // 6. Optimistic UI update — apply the correct post-claim state immediately.
         const preClaimStats = statsRef.current;

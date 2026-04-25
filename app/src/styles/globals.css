@@ -313,3 +313,113 @@ body::after {
   position: relative;
   z-index: 1;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MOBILE UX — Touch, performance, and layout improvements
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Prevent iOS double-tap zoom + grey tap flash on all interactive elements */
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Prevent iOS from auto-zooming on input focus (requires font-size >= 16px) */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Safe area padding for notched phones (iPhone X+, Android punch-hole) */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Minimum 44px touch targets (Apple/Google HIG recommendation) */
+@media (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Stat card action buttons get extra tap area on touch screens */
+  .stat-action-btn {
+    padding: 0.625rem 0.875rem !important;
+  }
+}
+
+/* ── Mobile: Disable heavy backdrop-filter (main GPU jank source on phones) ─── */
+/* backdrop-filter causes significant frame drops on mid-range Android and older  */
+/* iPhones when applied to many overlapping elements on the same page.            */
+@media (max-width: 768px) {
+  .glass,
+  .glass-raised {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    /* Compensate with a slightly more opaque solid background */
+    background: rgba(13, 18, 32, 0.96) !important;
+  }
+
+  /* Simplify the body background animation — fixed gradients are composited
+     but the noise texture SVG overlay can stutter during scroll on mobile */
+  body::after {
+    display: none;
+  }
+
+  /* Reduce grid-dots pattern rendering cost on mobile */
+  .grid-dots {
+    background-size: 48px 48px;
+  }
+
+  /* Wallet adapter modal — full-screen on mobile */
+  .wallet-adapter-modal-wrapper {
+    border-radius: 1rem 1rem 0 0 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ── Reduced motion: respect user preference ─────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Small screen layout fixes ───────────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Prevent horizontal overflow from long wallet addresses */
+  .wallet-address {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Tighten button padding on very small screens */
+  .btn-primary, .btn-ghost {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Ensure stat card numbers don't overflow on narrow screens */
+  .stat-num {
+    font-size: clamp(1.125rem, 5vw, 1.625rem) !important;
+    word-break: break-all;
+  }
+
+  /* Stack navbar items on very small screens */
+  .navbar-actions {
+    gap: 0.375rem;
+  }
+}
