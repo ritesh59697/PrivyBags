@@ -57,8 +57,8 @@ function StatCard({ label, value, sub, accentColor, bgColor, icon: Icon, index, 
       />
 
       {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ background: `${accentColor}15`, border: `1px solid ${accentColor}22` }}
@@ -66,12 +66,12 @@ function StatCard({ label, value, sub, accentColor, bgColor, icon: Icon, index, 
             <Icon className="w-3.5 h-3.5" style={{ color: accentColor }} />
           </div>
           <span
-            className="text-xs uppercase tracking-wider"
+            className="text-[10px] uppercase tracking-wider truncate"
             style={{
               color: "var(--text-muted)",
               fontFamily: "var(--font-display)",
               fontWeight: 700,
-              letterSpacing: "0.1em",
+              letterSpacing: "0.05em",
             }}
           >
             {label}
@@ -84,7 +84,7 @@ function StatCard({ label, value, sub, accentColor, bgColor, icon: Icon, index, 
             whileTap={{ scale: 0.95 }}
             onClick={action.fn}
             disabled={action.disabled}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all disabled:opacity-50 flex-shrink-0"
             style={{
               background: `${accentColor}12`,
               border: `1px solid ${accentColor}25`,

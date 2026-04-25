@@ -261,7 +261,7 @@ export async function wrapSolForTipping(
   } catch (err: any) {
     if (err.name === "AlreadyProcessedError") {
       console.warn("[PrivyBag:wrap] TX 1 already processed — ATA already funded ✓");
-      setupSig = "already-processed";
+      setupSig = err.signature || "already-processed";
     } else {
       throw err;
     }
@@ -309,7 +309,7 @@ export async function wrapSolForTipping(
   } catch (err: any) {
     if (err.name === "AlreadyProcessedError") {
       console.warn("[PrivyBag:wrap] TX 2 already processed — balance already loaded ✓");
-      loadSig = "already-processed";
+      loadSig = err.signature || "already-processed";
     } else {
       throw new Error(`loadAta() failed: ${err.message}`);
     }

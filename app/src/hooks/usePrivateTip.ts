@@ -123,16 +123,17 @@ export function usePrivateTip(): UsePrivateTipReturn {
           err?.name === "AlreadyProcessedError" ||
           String(err?.message).includes("already been processed")
         ) {
+          const sig = err.signature || "already-confirmed";
           console.log(
             "[usePrivateTip] AlreadyProcessedError — tx was confirmed on a previous attempt.",
-            "Treating as success."
+            "Using signature:", sig
           );
           // We don't have a result object here, but the tip landed — show success
           setStatus("success");
           setResult({
             success: true,
-            transferSignatures: [],
-            depositSignature: "already-confirmed",
+            transferSignatures: [sig],
+            depositSignature: sig,
             vaultAddress: "",
             recipientAta: creatorKey,
             vaultUpdateSignature: null,

@@ -142,8 +142,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         // No compressed balance yet — normal
       }
 
-      // ── 3. Combined Total (including claimed to keep delta accurate) ──────────
-      const combinedTotal = vaultReceived + compressedSol + totalClaimed;
+      // ── 3. Combined Total ──────────────────────────────────────────────────
+      // Note: vaultReceived (total_received in the PDA) is a running total that 
+      // already includes totalClaimed. Adding totalClaimed again would double-count.
+      const combinedTotal = vaultReceived + compressedSol;
 
       // Skip first poll to establish baseline
       if (lastTipCount.current === null || lastCombinedTotal.current === null) {
