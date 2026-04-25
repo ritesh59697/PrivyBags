@@ -54,7 +54,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicKey } from "@solana/web3.js";
-import { getLightRpc } from "@/lib/light/connection";
+import { getLightRpc, resetLightRpc } from "@/lib/light/connection";
 import {
   deriveCreatorVaultAddress,
   type WalletAdapterSigner,
@@ -195,6 +195,18 @@ export function useCreatorDashboard(
     } catch (err: any) {
       console.error("[useCreatorDashboard] Fetch error:", err.message);
       setError(err.message ?? "Failed to load stats");
+      // Fix 3: Reset stale RPC singleton on network errors
+      // so the next fetch gets a fresh connection instead of
+      // reusing the dead Vercel cold-start instance.
+      if (
+        err.message?.includes("fetch") ||
+        err.message?.includes("network") ||
+        err.message?.includes("ECONNREFUSED") ||
+        err.message?.includes("socket")
+      ) {
+        console.warn("[useCreatorDashboard] Network error — resetting RPC singleton");
+        resetLightRpc();
+      }
     } finally {
       isFetchingRef.current = false;
       setLoading(false);
@@ -338,12 +350,23 @@ export function useCreatorDashboard(
           await claimPrivateShare(wallet, BigInt(amountLamports));
           console.log("[useCreatorDashboard] Historical claim recorded in Vault PDA.");
         } catch (e: any) {
-          console.warn("[useCreatorDashboard] Could not record claim in Vault PDA (stats may be out of sync):", e.message);
+          console.warn("[useCreatorDashboard] Could not record claim in Vault PDA (non-fatal):", e.message);
         }
-        
-        console.log("[useCreatorDashboard] ✅ Claim complete. Waiting 2s for indexer...");
-        await new Promise(r => setTimeout(r, 2000));
-        await fetchStats();
+
+        // Fix 3: Retry fetchStats up to 3 times with 2s gaps.
+        // The Photon indexer can take up to 6s to reflect a new state.
+        // A single 2s delay was not enough in production.
+        console.log("[useCreatorDashboard] ✅ Claim complete. Polling indexer...");
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          await new Promise(r => setTimeout(r, 2000));
+          await fetchStats();
+          const updated = statsRef.current;
+          if (updated && updated.compressedSol < currentCompressed - 0.000_01) {
+            console.log(`[useCreatorDashboard] Indexer caught up on attempt ${attempt}`);
+            break;
+          }
+          console.log(`[useCreatorDashboard] Indexer not caught up yet (attempt ${attempt}/3)`);
+        }
         return finalSig;
       } catch (err: any) {
         if (
