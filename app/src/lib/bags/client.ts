@@ -28,8 +28,13 @@
 export interface BagsCreator {
   /** Twitter/X handle (lowercase, no @) */
   slug: string;
-  /** The wallet address tips will be sent to */
+  /** The wallet address tips will be sent to (Phantom if connected, custodial otherwise) */
   walletAddress: string;
+  /**
+   * The Bags custodial wallet — always present when resolved via username.
+   * May equal walletAddress when walletType is "custodial".
+   */
+  custodialWallet?: string;
   /** Display name from platformData.display_name */
   displayName: string;
   avatarUrl?: string;
@@ -37,8 +42,7 @@ export interface BagsCreator {
   description?: string;
   /**
    * "connected"  — walletAddress is the creator's linked Phantom/external wallet
-   * "custodial"  — walletAddress is the Bags custodial wallet (creator must
-   *                withdraw to Phantom via bags.fm/settings/wallets)
+   * "custodial"  — walletAddress is the Bags custodial wallet (fan can override)
    * "direct"     — user typed the wallet address directly, no Bags lookup
    */
   walletType: "connected" | "custodial" | "direct";

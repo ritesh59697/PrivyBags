@@ -1,42 +1,28 @@
 // src/app/api/bags/creator/route.ts
 //
-// Server-side proxy — resolves a Bags username to a wallet address.
+// Server-side proxy — resolves a Bags username to a creator profile.
 //
-// ── WHY TWO CALLS ────────────────────────────────────────────────────────────
+// ── WALLET RESOLUTION (3-layer) ──────────────────────────────────────────────
 //
-// The Bags fee-share/wallet/v2 endpoint returns different wallets depending
-// on the `provider` query param:
+// Layer 1 (client-handled): Direct wallet address → skip API, walletType: "direct"
 //
-//   provider=twitter  → Bags CUSTODIAL wallet (D5L3...cmPa)
-//                        This is the wallet Bags uses for fee distribution.
-//                        Creator must go to bags.fm/settings/wallets to move
-//                        funds from here to their Phantom.
+// Layer 2 (this route, Step 1):
+//   provider=twitter → custodial wallet (D5L3...cmPa) + platformData (avatar, name)
+//   We always get this for profile display purposes.
 //
-//   provider=solana   → Creator's CONNECTED external wallet (GmH2...C8t6)
-//                        This is present only if the creator linked their
-//                        Phantom/Backpack on bags.fm. username param = wallet address.
+// Layer 3 (this route, Step 2):
+//   We attempt to discover a linked Phantom by calling:
+//   provider=solana & username=<custodial_wallet>
+//   Bags sometimes stores this cross-reference when a creator links their Phantom
+//   to their custodial wallet. If found → walletType: "connected", use Phantom.
+//   If not found → walletType: "custodial", UI will offer override input.
 //
-// PrivyBag wants to tip the creator's connected wallet so they can claim
-// directly in Phantom without going through Bags.
+// ── WHY THE OVERRIDE UI EXISTS ───────────────────────────────────────────────
 //
-// STRATEGY:
-//   1. Call twitter provider → get custodial wallet + platformData (display name, avatar)
-//   2. Check if the custodial wallet itself has a linked connected wallet by
-//      calling the twitter lookup WITHOUT provider to get all linked accounts.
-//      (Bags doesn't expose a "get all linked wallets for username" endpoint,
-//       so we return the custodial wallet and flag it clearly in walletType.)
-//
-// RESULT: We always return the custodial wallet as walletAddress, with
-//   walletType: "custodial" so the UI can show a helpful note.
-//   If the user typed a raw wallet address, walletType is "direct".
-//
-// ── HOW THE CREATOR GETS THEIR PHANTOM WALLET TIPPED ─────────────────────────
-//
-//   Option A (recommended): Creator pastes their Phantom wallet address into
-//     the PrivyBag search box. walletType becomes "direct" and tips go straight there.
-//
-//   Option B: Tips go to Bags custodial wallet. Creator withdraws to Phantom
-//     via bags.fm/settings/wallets → Switch Wallet (free, instant).
+// Most creators have NOT explicitly linked their Phantom to Bags. In that case
+// we get walletType: "custodial" and show a prominent UI note on the tip page
+// asking the fan to paste the creator's actual Phantom address. This redirects
+// the tip directly to the creator's self-custody wallet.
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -75,7 +61,7 @@ export async function GET(req: NextRequest) {
 
   console.log(`[PrivyBag:api] Resolving username: @${username}`);
 
-  // ── Step 1: Twitter provider → custodial wallet + profile data ──────────────
+  // ── Layer 2: Twitter provider → custodial wallet + profile data ─────────────
   let twitterResult: any = null;
   try {
     twitterResult = await bagsFetch("twitter", username);
@@ -94,22 +80,34 @@ export async function GET(req: NextRequest) {
 
   console.log(`[PrivyBag:api] @${username} → custodial: ${custodialWallet.slice(0, 8)}…`);
 
-  // ── Step 2: Attempt to find a connected external wallet ─────────────────────
-  // Bags supports provider=solana where username = the wallet address.
-  // There is no "get all wallets for twitter username" endpoint.
-  // We cannot discover the connected Phantom wallet from just a twitter handle.
-  //
-  // Resolution: return the custodial wallet with walletType: "custodial".
-  // The UI will show a note: "This is @username's Bags wallet.
-  // To tip their Phantom directly, ask them to paste their wallet address."
+  // ── Layer 3: Attempt to discover a linked Phantom wallet ────────────────────
+  // Bags cross-references custodial wallets with linked external wallets.
+  // Call provider=solana with the custodial wallet address as username.
+  // If the creator linked their Phantom on bags.fm → we get their Phantom back.
+  let connectedWallet: string | null = null;
+  try {
+    const solanaResult = await bagsFetch("solana", custodialWallet);
+    if (solanaResult?.wallet && solanaResult.wallet !== custodialWallet) {
+      connectedWallet = solanaResult.wallet as string;
+      console.log(`[PrivyBag:api] @${username} → connected Phantom: ${connectedWallet.slice(0, 8)}…`);
+    }
+  } catch {
+    // Non-fatal — fall back to custodial
+  }
+
+  const walletAddress = connectedWallet ?? custodialWallet;
+  const walletType = connectedWallet ? "connected" : "custodial";
 
   const creator = {
     slug: pd.username ?? username,
-    walletAddress: custodialWallet,
+    walletAddress,
+    custodialWallet,          // always include so UI can show it separately
     displayName: pd.display_name ?? pd.username ?? username,
     avatarUrl: pd.avatar_url ?? undefined,
-    walletType: "custodial" as const,
+    walletType,
   };
+
+  console.log(`[PrivyBag:api] @${username} resolved → ${walletType} (${walletAddress.slice(0, 8)}…)`);
 
   return NextResponse.json(creator, {
     headers: { "Cache-Control": "s-maxage=60, stale-while-revalidate=120" },
