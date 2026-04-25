@@ -20,6 +20,11 @@ export const metadata: Metadata = {
     title: "PrivyBag",
     description: "Privacy-first tipping for Bags creators",
   },
+  icons: {
+    icon: "/plogo.png",
+    shortcut: "/plogo.png",
+    apple: "/plogo.png",
+  },
 };
 
 export default function RootLayout({

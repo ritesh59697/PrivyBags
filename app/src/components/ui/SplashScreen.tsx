@@ -38,14 +38,15 @@ export function SplashScreen() {
             }}
             className="absolute inset-0 rounded-full border-2 border-purple-500/30"
           />
-          
+
           <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl shadow-purple-500/20">
             <Image
-              src="/logo.png"
+              src="/plogo.png"
               alt="PrivyBag Logo"
               fill
               className="object-cover scale-110"
               priority
+              sizes="(max-width: 768px) 112px, 128px"
             />
           </div>
         </motion.div>

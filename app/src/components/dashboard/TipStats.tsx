@@ -1,26 +1,13 @@
 "use client";
 // src/components/dashboard/TipStats.tsx
-//
-// FIX 3: SEPARATED BALANCE DISPLAY
-//   Shows compressedSol, vaultSol, and withdrawableSol as distinct values.
-//   "Unclaimed" now means compressedSol (funds in Light that need claim step).
-//   "Available to withdraw" means withdrawableSol (in vault, ready now).
-//
-// FIX 4: CLAIM BUTTON
-//   Decompresses creator's Light wSOL → native SOL → creator wallet.
-//   This is the missing step between receiving a shielded tip and withdrawing.
-//
-// FIX 5: WITHDRAW LOGIC
-//   Only enabled when withdrawableSol > 0 (vault has SOL above rent-exempt).
-//   Not mixed with compressedSol anymore.
 
 import { PublicKey } from "@solana/web3.js";
 import {
-  Shield, TrendingUp, Coins, Lock, DownloadCloud,
-  Bell, X, ExternalLink, CheckCircle2, Zap
+  TrendingUp, Coins, Zap, Lock,
+  DownloadCloud, Bell, X, ExternalLink,
+  CheckCircle2, RefreshCw, ShieldCheck,
 } from "lucide-react";
 import { useCreatorDashboard } from "@/hooks/useCreatorDashboard";
-import { PrivacyBadge } from "@/components/ui/PrivacyBadge";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { AlreadyProcessedError } from "@/lib/light/shielded-transfer";
@@ -31,6 +18,112 @@ interface TipStatsProps {
   creatorPublicKey: PublicKey;
 }
 
+// ─── Stat card ────────────────────────────────────────────────────────────────
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  sub: string;
+  accentColor: string;
+  bgColor: string;
+  icon: React.ElementType;
+  index: number;
+  action?: {
+    label: string;
+    fn: () => void;
+    disabled: boolean;
+    icon: React.ElementType;
+  } | null;
+  errorMsg?: string | null;
+}
+
+function StatCard({ label, value, sub, accentColor, bgColor, icon: Icon, index, action, errorMsg }: StatCardProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.07, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ y: -2, transition: { duration: 0.18 } }}
+      className="relative rounded-2xl p-5 flex flex-col gap-4 group"
+      style={{
+        background: bgColor,
+        border: `1px solid ${accentColor}18`,
+        boxShadow: `0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03)`,
+      }}
+    >
+      {/* Hover glow */}
+      <div
+        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none"
+        style={{ background: `radial-gradient(ellipse at top left, ${accentColor}0a, transparent 60%)` }}
+      />
+
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: `${accentColor}15`, border: `1px solid ${accentColor}22` }}
+          >
+            <Icon className="w-3.5 h-3.5" style={{ color: accentColor }} />
+          </div>
+          <span
+            className="text-xs uppercase tracking-wider"
+            style={{
+              color: "var(--text-muted)",
+              fontFamily: "var(--font-display)",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+            }}
+          >
+            {label}
+          </span>
+        </div>
+
+        {action && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={action.fn}
+            disabled={action.disabled}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+            style={{
+              background: `${accentColor}12`,
+              border: `1px solid ${accentColor}25`,
+              color: accentColor,
+              fontFamily: "var(--font-display)",
+            }}
+          >
+            <action.icon className="w-3 h-3" />
+            {action.label}
+          </motion.button>
+        )}
+      </div>
+
+      {/* Value */}
+      <div>
+        <p
+          className="mb-1"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 800,
+            fontSize: "1.625rem",
+            color: accentColor,
+            letterSpacing: "-0.02em",
+            lineHeight: 1,
+          }}
+        >
+          {value}
+        </p>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>{sub}</p>
+      </div>
+
+      {errorMsg && (
+        <p className="text-xs" style={{ color: "#f87171" }}>{errorMsg}</p>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export function TipStats({ creatorPublicKey }: TipStatsProps) {
   const {
     stats, loading, error, refresh,
@@ -40,25 +133,25 @@ export function TipStats({ creatorPublicKey }: TipStatsProps) {
 
   const { publicKey, signTransaction } = useWallet();
   const isOwner = publicKey?.equals(creatorPublicKey) ?? false;
-
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [claimTx, setClaimTx] = useState<string | null>(null);
   const [withdrawTx, setWithdrawTx] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ── Claim compressed → wallet ──────────────────────────────────────────────
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    refresh();
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
 
   const handleClaim = async () => {
     if (!publicKey || !signTransaction || !isOwner) return;
     setClaimTx(null);
-
     try {
       const sig = await claimCompressedFunds({ publicKey, signTransaction });
       if (sig) setClaimTx(sig);
     } catch (e: any) {
-      if (
-        e instanceof AlreadyProcessedError ||
-        String(e?.message).includes("already been processed")
-      ) {
+      if (e instanceof AlreadyProcessedError || String(e?.message).includes("already been processed")) {
         setClaimTx("already-confirmed");
       } else {
         alert(`Claim failed: ${e.message}`);
@@ -66,31 +159,20 @@ export function TipStats({ creatorPublicKey }: TipStatsProps) {
     }
   };
 
-  // ── Withdraw vault SOL → wallet ────────────────────────────────────────────
-
   const handleWithdraw = async () => {
     if (!publicKey || !signTransaction || !isOwner) return;
-
     if (!stats?.withdrawableSol || stats.withdrawableSol < 0.000_01) {
-      alert("No withdrawable vault balance.");
+      alert("No withdrawable vault balance.\n\nIf you have compressed tips, use Claim first.");
       return;
     }
-
     setIsWithdrawing(true);
     setWithdrawTx(null);
     try {
       const sig = await withdrawFromVault({ publicKey, signTransaction });
-      if (sig) {
-        setWithdrawTx(sig);
-        refresh();
-      }
+      if (sig) { setWithdrawTx(sig); refresh(); }
     } catch (e: any) {
-      if (
-        e instanceof AlreadyProcessedError ||
-        String(e?.message).includes("already been processed")
-      ) {
-        setWithdrawTx("already-confirmed");
-        refresh();
+      if (e instanceof AlreadyProcessedError || String(e?.message).includes("already been processed")) {
+        setWithdrawTx("already-confirmed"); refresh();
       } else {
         alert(`Withdraw failed: ${e.message}`);
       }
@@ -99,220 +181,269 @@ export function TipStats({ creatorPublicKey }: TipStatsProps) {
     }
   };
 
-  if (loading) {
+  // ── Loading ─────────────────────────────────────────────────────────────────
+  if (loading && !stats) {
     return (
-      <div className="flex flex-col gap-4">
-        <div className="h-8 w-40 bg-gray-900 rounded-lg animate-pulse" />
-        <div className="grid grid-cols-2 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-28 bg-gray-900 rounded-2xl animate-pulse" />
+      <div className="flex flex-col gap-5">
+        <div className="h-7 w-44 rounded-xl animate-pulse" style={{ background: "rgba(255,255,255,0.05)" }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-32 rounded-2xl animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} />
           ))}
         </div>
       </div>
     );
   }
 
-  if (error || !stats) {
-    // ... (error state)
-    return stats ? null : (
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
+  // ── No vault ────────────────────────────────────────────────────────────────
+  if (!stats) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-center flex flex-col items-center gap-4"
+        className="rounded-2xl p-12 text-center flex flex-col items-center gap-4"
+        style={{ background: "rgba(13,18,32,0.6)", border: "1px solid rgba(255,255,255,0.06)" }}
       >
-        <Shield className="w-10 h-10 text-gray-700" />
+        <div
+          className="w-12 h-12 rounded-2xl flex items-center justify-center"
+          style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.15)" }}
+        >
+          <ShieldCheck className="w-6 h-6 text-purple-500" />
+        </div>
         <div>
-          <p className="font-semibold text-gray-300 mb-1">No vault found</p>
-          <p className="text-sm text-gray-500">
-            You haven&apos;t initialized your PrivyBag vault yet.
+          <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.9375rem", color: "var(--text-primary)" }}>
+            No vault found
+          </p>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            Send your first tip to initialize the vault PDA.
           </p>
         </div>
       </motion.div>
     );
   }
 
+  // ── Stat cards config ───────────────────────────────────────────────────────
+  const cards: StatCardProps[] = [
+    {
+      label: "Total Tips",
+      value: stats.tipCount,
+      sub: "shielded tips received",
+      accentColor: "#8b5cf6",
+      bgColor: "rgba(109,40,217,0.06)",
+      icon: TrendingUp,
+      index: 0,
+      action: null,
+    },
+    {
+      label: "Total Received",
+      value: `${stats.totalReceivedSol.toFixed(4)} SOL`,
+      sub: "compressed + vault combined",
+      accentColor: "#22c55e",
+      bgColor: "rgba(34,197,94,0.05)",
+      icon: Coins,
+      index: 1,
+      action: null,
+    },
+    {
+      label: "Unclaimed",
+      value: `${stats.unclaimedSol.toFixed(4)} SOL`,
+      sub: "in Light compressed ATA",
+      accentColor: "#f59e0b",
+      bgColor: "rgba(245,158,11,0.05)",
+      icon: Zap,
+      index: 2,
+      action: isOwner && stats.unclaimedSol > 0.000_01
+        ? { label: isClaiming ? "Claiming…" : "Claim", fn: handleClaim, disabled: isClaiming, icon: DownloadCloud }
+        : null,
+      errorMsg: claimError,
+    },
+    {
+      label: "In Vault",
+      value: `${stats.vaultSol.toFixed(4)} SOL`,
+      sub: stats.withdrawableSol > 0.000_01
+        ? `${stats.withdrawableSol.toFixed(4)} SOL withdrawable`
+        : "below rent-exempt minimum",
+      accentColor: "#3b82f6",
+      bgColor: "rgba(59,130,246,0.05)",
+      icon: Lock,
+      index: 3,
+      action: isOwner && stats.withdrawableSol > 0.000_01
+        ? { label: isWithdrawing ? "Withdrawing…" : "Withdraw", fn: handleWithdraw, disabled: isWithdrawing, icon: DownloadCloud }
+        : null,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-5">
+
+      {/* ── Alerts ───────────────────────────────────────────────────────────── */}
       <AnimatePresence mode="popLayout">
-        {/* ── New Tip Banner ────────────────────────────────────────────────── */}
+
+        {/* New tip banner */}
         {newTip && (
           <motion.div
-            initial={{ opacity: 0, y: -20, height: 0 }}
+            key="new-tip"
+            initial={{ opacity: 0, y: -12, height: 0 }}
             animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: -20, height: 0 }}
+            exit={{ opacity: 0, y: -12, height: 0 }}
             className="overflow-hidden"
           >
             <div
-              className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-medium"
+              className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
               style={{
-                background: "linear-gradient(135deg, rgba(34,197,94,0.15) 0%, rgba(16,185,129,0.10) 100%)",
-                border: "1px solid rgba(34,197,94,0.35)",
+                background: "rgba(34,197,94,0.07)",
+                border: "1px solid rgba(34,197,94,0.2)",
               }}
             >
               <div className="flex items-center gap-2.5">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-                </span>
-                <Bell className="w-4 h-4 text-green-400" />
-                <span className="text-green-300">🎉 New tip received!</span>
+                <motion.span
+                  animate={{ scale: [1, 1.3, 1] }}
+                  transition={{ duration: 0.6, repeat: 3 }}
+                  className="w-2 h-2 rounded-full bg-green-400"
+                />
+                <Bell className="w-3.5 h-3.5 text-green-400" />
+                <span className="text-sm font-semibold text-green-300">New tip received!</span>
               </div>
-              <button onClick={dismissNewTip} className="text-green-600 hover:text-green-400">
+              <button onClick={dismissNewTip} style={{ color: "var(--text-muted)" }}>
                 <X className="w-4 h-4" />
               </button>
             </div>
           </motion.div>
         )}
 
-        {/* ── Success Toasts (Claim/Withdraw) ───────────────────────────────── */}
+        {/* Claim / Withdraw success */}
         {(claimTx || withdrawTx) && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            key="tx-success"
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm"
+            exit={{ opacity: 0, scale: 0.97 }}
+            className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
             style={{
-              background: claimTx 
-                ? "linear-gradient(135deg, rgba(109,40,217,0.18) 0%, rgba(59,130,246,0.10) 100%)"
-                : "linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.10) 100%)",
-              border: claimTx 
-                ? "1px solid rgba(109,40,217,0.35)"
-                : "1px solid rgba(16,185,129,0.35)",
+              background: claimTx ? "rgba(109,40,217,0.08)" : "rgba(34,197,94,0.07)",
+              border: `1px solid ${claimTx ? "rgba(139,92,246,0.25)" : "rgba(34,197,94,0.2)"}`,
             }}
           >
             <div className="flex items-center gap-2.5 flex-wrap">
-              <CheckCircle2 className={`w-4 h-4 ${claimTx ? "text-purple-400" : "text-green-400"} flex-shrink-0`} />
-              <span className={claimTx ? "text-purple-300" : "text-green-300"}>
-                {claimTx ? "Tips claimed — SOL sent to your wallet!" : "Withdrawal confirmed!"}
+              <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${claimTx ? "text-purple-400" : "text-green-400"}`} />
+              <span className={`text-sm font-medium ${claimTx ? "text-purple-300" : "text-green-300"}`}>
+                {claimTx ? "Tips claimed — SOL sent to your wallet" : "Withdrawal confirmed"}
               </span>
-              {((claimTx && claimTx !== "already-confirmed") || (withdrawTx && withdrawTx !== "already-confirmed")) && (
+              {(claimTx && claimTx !== "already-confirmed") || (withdrawTx && withdrawTx !== "already-confirmed") ? (
                 <a
                   href={`https://explorer.solana.com/tx/${claimTx || withdrawTx}?cluster=devnet`}
-                  target="_blank" rel="noopener noreferrer"
-                  className={`text-xs ${claimTx ? "text-purple-400 hover:text-purple-300" : "text-green-400 hover:text-green-300"} underline flex items-center gap-1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs underline transition-colors"
+                  style={{ color: claimTx ? "#a78bfa" : "#4ade80" }}
                 >
                   Explorer <ExternalLink className="w-3 h-3" />
                 </a>
-              )}
+              ) : null}
             </div>
-            <button onClick={() => { setClaimTx(null); setWithdrawTx(null); }} className="text-gray-500 hover:text-gray-300">
+            <button onClick={() => { setClaimTx(null); setWithdrawTx(null); }} style={{ color: "var(--text-muted)" }}>
               <X className="w-4 h-4" />
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* ── Header ───────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Tip Statistics</h2>
-        <PrivacyBadge label="Aggregate Only" size="sm" />
+        <div className="flex items-center gap-3">
+          <h2
+            style={{
+              fontFamily: "var(--font-display)",
+              fontWeight: 800,
+              fontSize: "1.125rem",
+              color: "var(--text-primary)",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Vault Statistics
+          </h2>
+          {/* Active badge */}
+          {stats.isActive && (
+            <span
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              style={{
+                background: "rgba(34,197,94,0.08)",
+                border: "1px solid rgba(34,197,94,0.2)",
+                color: "#22c55e",
+                fontFamily: "var(--font-display)",
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Active
+            </span>
+          )}
+        </div>
+
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95, rotate: 180 }}
+          onClick={handleRefresh}
+          className="w-8 h-8 flex items-center justify-center rounded-lg transition-all"
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 transition-all ${isRefreshing ? "animate-spin" : ""}`}
+            style={{ color: "var(--text-muted)" }}
+          />
+        </motion.button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {[
-          {
-            label: "Total Tips",
-            value: stats.tipCount,
-            sub: "private tips received",
-            icon: TrendingUp,
-            color: "purple",
-            bg: "bg-purple-950",
-            border: "border-purple-900",
-            text: "text-purple-400"
-          },
-          {
-            label: "Total Received",
-            value: `${stats.totalReceivedSol.toFixed(4)} SOL`,
-            sub: "compressed + vault",
-            icon: Coins,
-            color: "green",
-            bg: "bg-green-950",
-            border: "border-green-900",
-            text: "text-green-400"
-          },
-          {
-            label: "Unclaimed (Compressed)",
-            value: `${stats.unclaimedSol.toFixed(4)} SOL`,
-            sub: "in Light compressed ATA",
-            icon: Zap,
-            color: "yellow",
-            bg: "bg-yellow-950",
-            border: "border-yellow-900",
-            text: "text-yellow-400",
-            action: isOwner && stats.unclaimedSol > 0.000_01 ? {
-              label: isClaiming ? "Claiming…" : "Claim",
-              fn: handleClaim,
-              disabled: isClaiming,
-              icon: DownloadCloud
-            } : null
-          },
-          {
-            label: "In Vault",
-            value: `${stats.vaultSol.toFixed(4)} SOL`,
-            sub: stats.withdrawableSol > 0.000_01 ? `${stats.withdrawableSol.toFixed(4)} SOL withdrawable` : "below rent-exempt",
-            icon: Lock,
-            color: "blue",
-            bg: "bg-blue-950",
-            border: "border-blue-900",
-            text: "text-blue-400",
-            action: isOwner && stats.withdrawableSol > 0.000_01 ? {
-              label: isWithdrawing ? "Withdrawing…" : "Withdraw",
-              fn: handleWithdraw,
-              disabled: isWithdrawing,
-              icon: DownloadCloud
-            } : null
-          }
-        ].map((stat, i) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1, type: "spring", stiffness: 100 }}
-            whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-            className={`${stat.bg} ${stat.border} border rounded-2xl p-5 flex flex-col gap-3 shadow-lg shadow-black/20 transition-all hover:shadow-purple-500/5`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <stat.icon className={`w-4 h-4 ${stat.text}`} />
-                <span className="text-xs text-gray-500 font-medium">{stat.label}</span>
-              </div>
-              {stat.action && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={stat.action.fn}
-                  disabled={stat.action.disabled}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 ${stat.bg.replace('950', '500')}/15 hover:${stat.bg.replace('950', '500')}/25
-                             ${stat.text} rounded-lg text-xs font-semibold transition-all disabled:opacity-50`}
-                >
-                  <stat.action.icon className="w-3 h-3" />
-                  {stat.action.label}
-                </motion.button>
-              )}
-            </div>
-            <div>
-              <p className={`text-2xl font-bold ${stat.text}`}>{stat.value}</p>
-              <p className="text-xs text-gray-600 mt-0.5">{stat.sub}</p>
-            </div>
-          </motion.div>
+      {/* Privacy notice */}
+      <div
+        className="flex items-center gap-2.5 px-4 py-3 rounded-xl"
+        style={{
+          background: "rgba(109,40,217,0.05)",
+          border: "1px solid rgba(139,92,246,0.12)",
+        }}
+      >
+        <ShieldCheck className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Individual sender wallets and amounts are never stored on-chain. Aggregate totals only.
+        </p>
+      </div>
+
+      {/* ── Stat cards ───────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {cards.map((card) => (
+          <StatCard key={card.label} {...card} />
         ))}
       </div>
 
-      {/* Legend */}
-      <motion.div 
+      {/* ── Balance legend ────────────────────────────────────────────────────── */}
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="bg-gray-900/40 backdrop-blur-sm border border-gray-800 rounded-xl p-4 flex flex-col gap-2 text-xs text-gray-500"
+        transition={{ delay: 0.4 }}
+        className="rounded-xl p-4 flex flex-col gap-2.5"
+        style={{
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.05)",
+        }}
       >
-        <p className="text-gray-400 font-medium mb-1">Balance locations</p>
+        <p
+          className="text-[10px] uppercase tracking-widest mb-1"
+          style={{ color: "var(--text-muted)", fontFamily: "var(--font-display)", fontWeight: 700 }}
+        >
+          Balance locations
+        </p>
         {[
-          { color: "bg-yellow-400", text: "Compressed", detail: "in Light Protocol ATA. Use Claim to convert." },
-          { color: "bg-blue-400", text: "Vault", detail: "native SOL in PDA. Use Withdraw to move to wallet." },
-          { color: "bg-gray-500", text: "Claimed", detail: `${stats.totalClaimedSol.toFixed(4)} SOL total withdrawn.` }
-        ].map((item) => (
-          <div key={item.text} className="flex items-center gap-2">
-            <span className={`w-1.5 h-1.5 rounded-full ${item.color} flex-shrink-0`} />
-            <span><span className={item.color.replace('bg-', 'text-')}>{item.text}</span> — {item.detail}</span>
+          { dot: "#f59e0b", label: "Compressed", info: "In Light Protocol ATA — use Claim to convert to native SOL" },
+          { dot: "#3b82f6", label: "Vault", info: "Native SOL in PDA — use Withdraw to send to your wallet" },
+          { dot: "#6b7280", label: "Claimed", info: `${stats.totalClaimedSol.toFixed(4)} SOL total withdrawn to date` },
+        ].map((r) => (
+          <div key={r.label} className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: r.dot }} />
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <span className="font-semibold" style={{ color: r.dot }}>{r.label}</span>{" — "}{r.info}
+            </span>
           </div>
         ))}
       </motion.div>
