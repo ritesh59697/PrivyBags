@@ -87,6 +87,39 @@ export interface UseCreatorDashboardReturn {
   claimCompressedFunds: (wallet: WalletAdapterSigner) => Promise<string | null>;
 }
 
+// ─── localStorage helpers (SSR-safe) ─────────────────────────────────────────
+//
+// Since the Vault PDA may not be initialized (creator received compressed tips
+// without the deposit flow), we can't rely on total_claimed_lamports on-chain.
+// We persist the running claimed total in localStorage, keyed by creator pubkey.
+// This survives page refreshes and accumulates correctly across multiple claims.
+
+const LS_KEY = (pk: string) => `pb_claimed_${pk}`;
+
+function getPersistedClaimed(pk: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const v = localStorage.getItem(LS_KEY(pk));
+    return v ? parseFloat(v) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Adds `amount` to the stored total and returns the new running total.
+function addPersistedClaimed(pk: string, amount: number): number {
+  if (typeof window === "undefined") return amount;
+  try {
+    const prev = getPersistedClaimed(pk);
+    const next = prev + amount;
+    localStorage.setItem(LS_KEY(pk), next.toFixed(9));
+    console.log(`[useCreatorDashboard] localStorage claimed: ${prev.toFixed(5)} + ${amount.toFixed(5)} = ${next.toFixed(5)} SOL`);
+    return next;
+  } catch {
+    return amount;
+  }
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useCreatorDashboard(
@@ -158,26 +191,24 @@ export function useCreatorDashboard(
         // No compressed balance — normal on first use
       }
 
-      // ── 3. Total Received (stable, monotonic formula) ─────────────────────
-      // compressedSol and totalClaimed are complementary:
-      //   Before claim: compressedSol = tip amount, totalClaimed = 0
-      //   After claim:  compressedSol = 0, totalClaimed = tip amount
-      //                 (IF claimPrivateShare succeeded)
-      //
-      // PROBLEM: If the vault PDA is not initialized, claimPrivateShare
-      // fails and totalClaimed stays 0. After the claim unwrap, both are 0.
-      //
-      // FIX: Use prevTotalRef as a floor. totalReceivedSol can NEVER
-      // decrease within a session. Once we've seen 0.05 SOL, we always
-      // show at least 0.05 SOL — even after a claim drains the balance.
-      const rawTotal = compressedSol + totalClaimed;
+      // ── 3. Total Received (persisted, monotonic) ───────────────────────────
+      // Use on-chain totalClaimed if vault is initialized, otherwise fall back
+      // to localStorage. This handles the common case where claimPrivateShare
+      // fails (vault never initialized) and totalClaimed stays 0 on-chain.
+      const storedClaimed = getPersistedClaimed(creatorPublicKey.toBase58());
+      const effectiveClaimed = Math.max(totalClaimed, storedClaimed);
+
+      // totalReceivedSol = current unclaimed + lifetime claimed
+      // This always gives the correct historical total regardless of claim state.
+      const rawTotal = compressedSol + effectiveClaimed;
+      // Apply prevTotalRef as an additional floor to handle indexer lag.
       const totalReceivedSol = prevTotalRef.current !== null
         ? Math.max(rawTotal, prevTotalRef.current)
         : rawTotal;
 
       const newStats: CreatorStats = {
         tipCount,
-        totalClaimedSol: totalClaimed,
+        totalClaimedSol: effectiveClaimed,   // show localStorage value if vault uninitialized
         isActive,
         compressedSol,
         vaultSol,
@@ -186,21 +217,24 @@ export function useCreatorDashboard(
         unclaimedSol: compressedSol,
       };
 
-      // BUG FIX 1: prevTotal is now a ref — no stale closure possible
+      // New-tip detection: only fire when totalReceivedSol genuinely increased
       if (prevTotalRef.current !== null && totalReceivedSol > prevTotalRef.current + 0.000_01) {
         console.log("[useCreatorDashboard] New tip! +", (totalReceivedSol - prevTotalRef.current).toFixed(5), "SOL");
         setNewTip(true);
       }
       prevTotalRef.current = totalReceivedSol;
 
-      // Only update state if values actually changed (prevents unnecessary re-renders)
+      // Update state — include totalReceivedSol and totalClaimedSol in the
+      // comparison so the UI re-renders when those change (not just vault/ATA)
       setStats((prev) => {
         if (
           !prev ||
-          prev.compressedSol !== newStats.compressedSol ||
-          prev.vaultSol !== newStats.vaultSol ||
-          prev.tipCount !== newStats.tipCount ||
-          prev.withdrawableSol !== newStats.withdrawableSol
+          prev.compressedSol       !== newStats.compressedSol ||
+          prev.vaultSol            !== newStats.vaultSol ||
+          prev.tipCount            !== newStats.tipCount ||
+          prev.withdrawableSol     !== newStats.withdrawableSol ||
+          prev.totalReceivedSol    !== newStats.totalReceivedSol ||
+          prev.totalClaimedSol     !== newStats.totalClaimedSol
         ) {
           statsRef.current = newStats;
           return newStats;
@@ -378,44 +412,45 @@ export function useCreatorDashboard(
         }
 
         // 4. Record the claim in the Anchor Vault PDA for historical stats.
-        // This MUST run even if batches were already-processed, so that
-        // total_claimed_lamports is updated and the dashboard shows correctly.
         try {
           const { claimPrivateShare } = await import("@/lib/anchor/privybag-client");
           await claimPrivateShare(wallet, BigInt(amountLamports));
           console.log("[useCreatorDashboard] Historical claim recorded in Vault PDA.");
         } catch (e: any) {
-          // Non-fatal — the vault may not be initialized (creator received
-          // compressed tips without ever going through the deposit flow).
-          // We handle this with an optimistic UI update below.
+          // Non-fatal — vault may not be initialized.
           console.warn("[useCreatorDashboard] Vault PDA not initialized — skipping on-chain record (non-fatal):", e.message);
         }
 
-        // 5. Optimistic UI update — apply the correct post-claim state
-        // IMMEDIATELY, before waiting for the indexer. This is critical when
-        // claimPrivateShare fails (vault not initialized) because fetchStats
-        // would return all zeros without this floor.
+        // 5. Persist to localStorage BEFORE the optimistic update.
+        // This is the key fix: localStorage accumulates correctly across multiple
+        // claims. preClaimStats.totalClaimedSol would always be 0 (vault
+        // uninitialized), so we can't use it as the accumulator base.
+        const newStoredClaimed = addPersistedClaimed(
+          creatorPublicKey.toBase58(),
+          currentCompressed
+        );
+
+        // 6. Optimistic UI update — apply the correct post-claim state immediately.
         const preClaimStats = statsRef.current;
         if (preClaimStats) {
-          const newTotalClaimed = preClaimStats.totalClaimedSol + currentCompressed;
           const newTotalReceived = Math.max(
             preClaimStats.totalReceivedSol,
-            newTotalClaimed  // compressedSol is now 0, claimed is now this
+            newStoredClaimed   // compressedSol is now 0, full history is in storedClaimed
           );
           const optimistic: CreatorStats = {
             ...preClaimStats,
-            compressedSol: 0,
-            unclaimedSol: 0,
-            totalClaimedSol: newTotalClaimed,
+            compressedSol:   0,
+            unclaimedSol:    0,
+            totalClaimedSol: newStoredClaimed,
             totalReceivedSol: newTotalReceived,
           };
-          // Update the floor so fetchStats respects this value
           prevTotalRef.current = newTotalReceived;
           statsRef.current = optimistic;
           setStats(optimistic);
-          console.log("[useCreatorDashboard] Optimistic stats applied:",
+          console.log(
+            "[useCreatorDashboard] Optimistic stats:",
             "received=", newTotalReceived.toFixed(5),
-            "claimed=", newTotalClaimed.toFixed(5)
+            "claimed=", newStoredClaimed.toFixed(5)
           );
         }
 
