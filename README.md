@@ -1,115 +1,191 @@
-# PrivyBag 🛡️✨
+# PrivyBag 🛡️
 
-**Private, Shielded Tipping for Bags Creators on Solana**
+> **Privacy-first tipping for Bags.fm creators on Solana**
 
-PrivyBag is a premium, privacy-preserving tipping layer built specifically for the **Bugs Hackathon**. It solves the core transparency problem of public blockchains: when a fan tips a creator, their wallets are permanently linked on-chain. PrivyBag breaks this link using **Vault PDA Indirection** and **Light Protocol ZK-Compression**.
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=for-the-badge&logo=vercel)](https://privy-bags.vercel.app)
+[![Built for Bags Hackathon](https://img.shields.io/badge/Bags%20Hackathon-2026-green?style=for-the-badge)](https://bags.fm)
+[![Solana Devnet](https://img.shields.io/badge/Solana-Devnet-purple?style=for-the-badge&logo=solana)](https://solana.com)
 
----
-
-## 🚀 Key Highlights
-
-*   🛡️ **Zero-Trace Tipping**: Breaks the direct on-chain link between Fans and Creators.
-*   ⚡ **Real-Time Reactivity**: High-performance WebSocket subscriptions (`onAccountChange`) for instant tip notifications.
-*   🎭 **Premium UX**: Modern, animated interface built with Next.js 15, Framer Motion, and boutique Tailwind styling.
-*   🌑 **ZK-Shielding**: Leverages Light Protocol V2 to hide transaction amounts and sender identities.
-*   📊 **Creator Dashboard**: Private aggregate statistics and secure, multi-stage claiming flow.
+**[🔗 Live Demo](https://privy-bags.vercel.app)** | **[📂 GitHub](https://github.com/ritesh59697/PrivyBags)**
 
 ---
 
-## 🛠 How It Works
+## What is PrivyBag?
 
-PrivyBag implements a unique **Hybrid Privacy Model** to balance transparency for creators and anonymity for fans.
+PrivyBag lets fans tip their favourite Bags.fm creators **without creating a direct on-chain link** between the fan's wallet and the creator's wallet.
 
-### 1. The Fan Side (Shielding)
-When you send a tip, your SOL is routed through a **CreatorVault PDA**. This program-owned account acts as a "privacy buffer." On-chain, your wallet is seen interacting with the PrivyBag program—not the creator's personal wallet.
+On a standard Solana transfer, any blockchain explorer instantly reveals:
+`Fan Wallet → Creator Wallet` — permanently, publicly.
 
-### 2. The Creator Side (Aggregation)
-Creators see their tips land in their private dashboard in real-time. Tips are stored as **ZK-Compressed accounts** (via Light Protocol) or native SOL in a program-managed vault.
+PrivyBag breaks that link using a **Vault PDA Indirection** model:
 
-### 3. The Claim Flow (Decoupling)
-To receive funds, the creator "Claims" their tips. This triggers a separate transaction that moves funds from the Vault PDA to their wallet. Since the Fan-to-Vault and Vault-to-Creator transactions happen at different times, the on-chain link is effectively broken.
+```
+Fan Wallet ──► Vault PDA ──► Creator Wallet
+     TX 1                        TX 2
+```
+
+- **TX 1** (Fan): `Fan → Vault PDA` — the creator's wallet address never appears.
+- **TX 2** (Creator): `Vault PDA → Creator` — the fan's wallet address never appears.
+- No single transaction on-chain connects fan to creator.
 
 ---
 
-## 🏗 Architecture
+## Key Features
 
-```text
+- 🔒 **Vault PDA privacy** — tips route through a program-controlled intermediary, breaking the fan ↔ creator graph
+- 🎯 **Bags.fm integration** — search creators by their Twitter/X handle, resolved via the official Bags fee-share API
+- 📊 **Creator dashboard** — view tip stats, compressed balance, vault balance, and claim funds
+- 🔔 **Real-time notifications** — creators get notified when new tips arrive (recipient-only, never fires for senders)
+- 💸 **One-click claim** — creators claim tips directly to their wallet from the dashboard
+- 🔑 **No signup required** — fans connect any Solana wallet (Phantom, Solflare) and tip instantly
+
+---
+
+## Privacy Model
+
+| Information | Visible on Explorer? | Why |
+|---|---|---|
+| A tip occurred | ✅ Yes | Transfer to Vault PDA is public |
+| Fan's wallet address | ✅ Yes | They signed TX 1 |
+| Exact tip amount | ✅ Yes | SOL transfer amount is public |
+| **Fan ↔ Creator link** | ❌ **No** | No single TX shows both — vault is the intermediary |
+| Creator's aggregate earnings | ✅ Yes | Stored in Vault PDA |
+| Individual sender identities | ❌ **No** | Creator only sees total balance, not who sent what |
+
+---
+
+## Architecture
+
+```
 privybag/
-├── app/                  Next.js 15 Frontend (Tailwind + Framer Motion)
-│   ├── src/lib/light/    Light Protocol SDK & ZK-Shielded logic
-│   ├── src/lib/anchor/   Anchor Client for Vault PDA interactions
-│   └── src/hooks/        Custom hooks for Private Tip & Dashboard flows
-└── programs/privybag/    Solana Anchor Program (Rust)
-    ├── state/            CreatorVault PDA definition
-    └── instructions/     Deposit, Record, and Secure Withdraw logic
+├── app/                            Next.js 15 frontend (App Router)
+│   └── src/
+│       ├── app/
+│       │   ├── page.tsx            Landing page + creator search
+│       │   ├── tip/[slug]/         Private tip form
+│       │   └── dashboard/          Creator dashboard
+│       ├── components/
+│       │   ├── tip/PrivateTipForm.tsx
+│       │   └── dashboard/TipStats.tsx
+│       ├── hooks/
+│       │   ├── usePrivateTip.ts    Tip flow wired to wallet adapter
+│       │   └── useCreatorDashboard.ts
+│       └── lib/
+│           ├── light/shielded-transfer.ts   Core vault + transfer logic
+│           ├── anchor/privybag-client.ts    Anchor program client
+│           └── bags/client.ts              Bags API integration
+│
+└── programs/privybag/              Anchor smart contract (Rust)
+    └── src/
+        ├── lib.rs                  Program entrypoint
+        ├── instructions/           deposit, withdraw, initialize_vault
+        └── state/                  CreatorVault PDA definition
 ```
 
 ---
 
-## ✨ Features
+## How It Works — Step by Step
 
-### 🔍 Smart Search
-Seamlessly lookup any Bags creator by their **Twitter/X handle**. Our integration resolves handle-to-wallet mapping instantly, allowing you to tip creators even if you only know their social profile.
+### For Fans
+1. Visit PrivyBag and search for a Bags.fm creator by their Twitter handle
+2. Connect your Phantom or Solflare wallet
+3. Select a tip amount and click **Send Privately**
+4. Sign one transaction — SOL goes to the creator's Vault PDA (not their wallet directly)
+5. Done. The explorer shows `Your Wallet → Vault PDA`, not `Your Wallet → Creator`
 
-### 🔔 Real-Time Notifications
-Never miss a tip. Our `NotificationProvider` uses Solana WebSockets to alert creators the millisecond a tip hits their vault, complete with delta calculation (showing the exact new tip amount).
-
-### 🎨 Boutique Design
-A hand-crafted UI featuring:
-- **Animated Splash Screen**: A premium reveal experience on first load.
-- **Micro-interactions**: Spring-based animations and smooth transitions for every click.
-- **Glassmorphism**: A sleek, dark-mode aesthetic with vibrant purple and green accents.
-
----
-
-## 💻 Tech Stack
-
-- **Framework**: Next.js 15 (App Router)
-- **Animations**: Framer Motion
-- **Styling**: Tailwind CSS
-- **Smart Contract**: Solana Anchor (Rust)
-- **Privacy**: Light Protocol V2 (ZK-Compression)
-- **Wallets**: @solana/wallet-adapter (Phantom, Solflare, etc.)
+### For Creators
+1. Go to `/dashboard` and connect the wallet matching your Bags.fm profile
+2. See your total tips, compressed balance, and vault balance broken out separately
+3. Click **Claim** to decompress any Light Protocol balance into native SOL
+4. Click **Withdraw** to move native SOL from the Vault PDA to your wallet
+5. Each withdrawal shows `Vault PDA → Your Wallet` on the explorer
 
 ---
 
-## 🚀 Getting Started
+## Tech Stack
 
-To run the project locally:
-
-1. **Clone and Install**:
-   ```bash
-   pnpm install
-   cd app && pnpm install
-   ```
-
-2. **Environment Setup**:
-   Create `app/.env.local` and add:
-   ```bash
-   NEXT_PUBLIC_RPC_URL=https://api.devnet.solana.com
-   BAGS_API_KEY=your_bags_api_key
-   ```
-
-3. **Run Dev Server**:
-   ```bash
-   cd app && pnpm dev
-   ```
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS |
+| Smart Contract | Anchor 0.31.1, Rust, Solana System Program |
+| Wallets | Phantom, Solflare via `@solana/wallet-adapter-react` |
+| Creator Data | Bags.fm Public API v2 (`fee-share/wallet/v2`) |
+| Privacy Layer | Vault PDA indirection (on-chain program) |
+| Deployment | Vercel (frontend), Solana Devnet (program) |
 
 ---
 
-## 📋 Submission Info
+## Deployed Contracts
 
-- **Hackathon**: Bags Hackathon (2026)
-- **Status**: Production-Ready Prototype
-- **Devnet Program ID**: `HFe9PvFPXnsKqGYK75kVcBke98fP94FWD3S1ffVrKFAi`
-- **RPC Support**: Optimized for high-frequency WebSocket updates.
-
----
-
-## ⚖️ Implementation Note
-
-PrivyBag is optimized for **Solana Devnet**. It demonstrates a scalable path toward financial privacy on Solana, moving away from simple public transfers toward a world where your support for creators doesn't have to be your public transaction history.
+| Network | Program ID |
+|---|---|
+| Solana Devnet | `HF9PvFPXnsKqGYK75kVcBke98fP94FWD3S1ffVrKFA1` |
 
 ---
 
-*Built with ❤️ for the Bags Community.*
+## Local Development
+
+### Prerequisites
+
+```bash
+rustup update stable
+solana --version      # >= 1.18.x
+anchor --version      # >= 0.31.1
+node --version        # >= 20.x
+pnpm --version        # >= 9.x
+```
+
+### Setup
+
+```bash
+# 1. Clone
+git clone https://github.com/ritesh59697/PrivyBags
+cd PrivyBags
+
+# 2. Configure environment
+cp .env.example app/.env.local
+# Add your keys to app/.env.local (see Environment Variables below)
+
+# 3. Install frontend dependencies
+cd app && pnpm install
+
+# 4. Run locally
+pnpm dev
+# → http://localhost:3000
+```
+
+### Environment Variables
+
+```env
+NEXT_PUBLIC_RPC_URL=https://api.devnet.solana.com
+NEXT_PUBLIC_PRIVYBAG_PROGRAM_ID=HF9PvFPXnsKqGYK75kVcBke98fP94FWD3S1ffVrKFA1
+NEXT_PUBLIC_SOLANA_NETWORK=devnet
+BAGS_API_KEY=your_bags_api_key_here
+NEXT_PUBLIC_BAGS_API_URL=https://public-api-v2.bags.fm
+```
+
+### Deploy Anchor Program (optional — already on Devnet)
+
+```bash
+cd ..   # repo root
+anchor build
+anchor deploy --provider.cluster devnet
+```
+
+---
+
+## Hackathon Submission
+
+**Event**: The Bags Hackathon — June 1, 2026
+
+**Category**: Privacy / Creator Tools
+
+**What makes this unique**:
+- Addresses a real pain point — onchain transparency kills creator privacy
+- Works with the existing Bags ecosystem (username resolution, fee-share wallets)
+- No ZK cryptography required — privacy through architectural indirection, keeping it simple and auditable
+- Fully functional end-to-end on Solana Devnet with a live UI
+
+---
+
+*Built with ❤️ for the Bags Hackathon by [@ritesh5969](https://x.com/Ritesh5969)*
