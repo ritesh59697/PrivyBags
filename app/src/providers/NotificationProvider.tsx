@@ -71,8 +71,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const publicKeyRef = useRef<PublicKey | null>(null);
   const lastTipCountRef = useRef<number | null>(null);
   const lastCombinedTotalRef = useRef<number | null>(null);
+  const lastCompressedRef = useRef<number | null>(null);  // compressed ATA baseline
   const isPollingRef = useRef(false);
   const seenSigsRef = useRef<Set<string>>(new Set());
+
+  // ── localStorage helpers for compressed balance baseline ─────────────────
+  // Persisting the baseline means subscription teardowns don't reset it to 0,
+  // which would cause the full existing balance to appear as a "new tip".
+  function loadCompressedBaseline(pk: PublicKey): number {
+    try {
+      const v = localStorage.getItem(`pb_baseline_${pk.toBase58()}`);
+      return v ? parseFloat(v) : 0;
+    } catch { return 0; }
+  }
+  function saveCompressedBaseline(pk: PublicKey, amount: number) {
+    try {
+      localStorage.setItem(`pb_baseline_${pk.toBase58()}`, amount.toFixed(9));
+    } catch { }
+  }
 
   // Keep ref in sync with wallet state
   useEffect(() => {
@@ -96,7 +112,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const tipKey = `pb_tips_${pk.toBase58()}`;
       const prev = parseInt(localStorage.getItem(tipKey) ?? "0", 10);
       localStorage.setItem(tipKey, String(prev + 1));
-    } catch {}
+    } catch { }
 
     const n: TipNotification = {
       id: `tip-${sig.slice(0, 8)}-${Date.now()}`,
@@ -111,7 +127,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []); // ← intentionally empty deps
 
   // BUG FIX 4: poll has NO deps — reads everything from refs at call time.
-  // This means the subscription is truly stable and never gets torn down.
   const poll = useCallback(async () => {
     const pk = publicKeyRef.current;
     if (!pk || isPollingRef.current) return;
@@ -120,40 +135,51 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       const rpc = getLightRpc();
 
-      // ── Vault PDA (Anchor) ───────────────────────────────────────────────
-      const vaultPda = deriveCreatorVaultAddress(pk);
-      const accountInfo = await rpc.getAccountInfo(vaultPda);
-
-      let tipCount = 0;
-      let vaultReceived = 0;
-      let totalClaimed = 0;
-
-      if (accountInfo?.data && accountInfo.data.length >= 8 + 32 + 32 + 8 + 8 + 8) {
-        const data = Buffer.from(accountInfo.data);
-        vaultReceived = Number(data.readBigUInt64LE(8 + 32 + 32)) / LAMPORTS_PER_SOL;
-        tipCount = Number(data.readBigUInt64LE(8 + 32 + 32 + 8));
-        totalClaimed = Number(data.readBigUInt64LE(8 + 32 + 32 + 8 + 8)) / LAMPORTS_PER_SOL;
-      } else if (accountInfo) {
-        vaultReceived = accountInfo.lamports / LAMPORTS_PER_SOL;
+      // ── Compressed ATA balance — primary delta source ─────────────────────
+      // The Vault PDA is never initialized for creators who receive tips purely
+      // via Light Protocol (no deposit ix). So we use the compressed ATA
+      // balance as the delta source — same approach as useCreatorDashboard.
+      let compressedSol = 0;
+      try {
+        const { getAssociatedTokenAddressInterface, getAtaInterface } =
+          await import("@lightprotocol/compressed-token/unified");
+        const lightAta = getAssociatedTokenAddressInterface(WSOL_MINT, pk);
+        const ataInfo = await getAtaInterface(rpc, lightAta, pk, WSOL_MINT);
+        compressedSol = Number(ataInfo?.parsed?.amount ?? 0) / LAMPORTS_PER_SOL;
+      } catch {
+        // ATA not yet initialized or query failed — keep compressedSol = 0
       }
 
-      // ── 3. Total for Delta ──────────────────────────────────────────────
-      // Note: vaultReceived (total_received in the PDA) is the historical 
-      // aggregate of all tips recorded. This is the most stable source for 
-      // detecting the delta of a new tip.
-      const combinedTotal = vaultReceived;
+      // ── Tip count from Vault PDA (best-effort, may be 0) ─────────────────
+      let tipCount = 0;
+      try {
+        const vaultPda = deriveCreatorVaultAddress(pk);
+        const accountInfo = await rpc.getAccountInfo(vaultPda);
+        if (accountInfo?.data && accountInfo.data.length >= 8 + 32 + 32 + 8 + 8 + 8) {
+          const data = Buffer.from(accountInfo.data);
+          tipCount = Number(data.readBigUInt64LE(8 + 32 + 32 + 8));
+        }
+      } catch { }
 
-      // First poll — set baseline only
-      if (lastTipCountRef.current === null || lastCombinedTotalRef.current === null) {
+      // ── First poll: set baseline, never fire a notification ───────────────
+      if (lastCompressedRef.current === null || lastTipCountRef.current === null) {
+        lastCompressedRef.current = compressedSol;
         lastTipCountRef.current = tipCount;
-        lastCombinedTotalRef.current = combinedTotal;
-        console.log("[PrivyBag:notify] Baseline:", combinedTotal.toFixed(5), "SOL");
+        console.log("[PrivyBag:notify] Baseline:", compressedSol.toFixed(5), "SOL compressed");
         return;
       }
 
-      const prevTotal = lastCombinedTotalRef.current;
-      const delta = combinedTotal - prevTotal;
-      const hasNewTip = tipCount > lastTipCountRef.current || delta > 0.000_01;
+      const prevCompressed = lastCompressedRef.current;
+      const delta = compressedSol - prevCompressed;
+      const tipCountRose = tipCount > lastTipCountRef.current;
+
+      // A genuine new tip: compressed balance increased OR on-chain tip count rose
+      const hasNewTip = delta > 0.000_01 || tipCountRose;
+
+      // Always update refs (even if no new tip) so next cycle sees fresh baseline
+      lastCompressedRef.current = compressedSol;
+      saveCompressedBaseline(pk, compressedSol);
+      lastTipCountRef.current = tipCount;
 
       if (!hasNewTip) return;
 
@@ -171,14 +197,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         const isSelf = feePayer === pk.toBase58();
 
         if (!isSelf) {
-          const displayAmount = delta > 0 ? delta : 0.001;
+          // delta is the amount of new tokens just received
+          // If delta is 0 but tipCountRose (vault PDA tracked it), use 0.001 as fallback
+          const displayAmount = delta > 0.000_01 ? delta : 0.001;
           addNotification(displayAmount, latestSig);
         }
       }
-
-      // Always update refs after processing
-      lastTipCountRef.current = tipCount;
-      lastCombinedTotalRef.current = combinedTotal;
     } catch (err: any) {
       console.warn("[PrivyBag:notify] Poll error:", err.message);
     } finally {
@@ -192,8 +216,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       // Reset on disconnect
       lastTipCountRef.current = null;
       lastCombinedTotalRef.current = null;
+      lastCompressedRef.current = null;
       seenSigsRef.current.clear();
       return;
+    }
+
+    // Load persisted compressed baseline so reconnects don't reset to 0
+    // (which would make the full existing balance show as a "new" tip)
+    const persisted = loadCompressedBaseline(publicKey);
+    if (persisted > 0) {
+      lastCompressedRef.current = persisted;
+      lastTipCountRef.current = 0;
+      console.log("[PrivyBag:notify] Loaded persisted baseline:", persisted.toFixed(5), "SOL");
     }
 
     // Run initial poll
