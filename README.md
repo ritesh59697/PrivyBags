@@ -5,10 +5,17 @@
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=for-the-badge&logo=vercel)](https://privy-bags.vercel.app)
 [![Built for Bags Hackathon](https://img.shields.io/badge/Bags%20Hackathon-2026-green?style=for-the-badge)](https://bags.fm)
 [![Solana Devnet](https://img.shields.io/badge/Solana-Devnet-purple?style=for-the-badge&logo=solana)](https://solana.com)
+[![Demo Video](https://img.shields.io/badge/Demo%20Video-Twitter%2FX-1DA1F2?style=for-the-badge&logo=x)](https://x.com/Ritesh5969/status/2048794473505960403?s=20)
 
-**[🔗 Live Demo](https://privy-bags.vercel.app)** | **[📂 GitHub](https://github.com/ritesh59697/PrivyBags)**
+**[🔗 Live Demo](https://privy-bags.vercel.app)** | **[📂 GitHub](https://github.com/ritesh59697/PrivyBags)** | **[🎬 Demo Video](https://x.com/Ritesh5969/status/2048794473505960403?s=20)**
 
 ---
+
+## 🎬 Demo Video
+
+> Watch PrivyBag in action — searching by Bags username, sending a private tip, and claiming compressed SOL from the creator dashboard.
+
+**[▶️ Watch on Twitter/X →](https://x.com/Ritesh5969/status/2048794473505960403?s=20)**
 
 ## What is PrivyBag?
 
