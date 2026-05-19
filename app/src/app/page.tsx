@@ -8,9 +8,12 @@ import { useRef, useEffect } from "react";
 import { motion, useInView, useScroll, useTransform } from "framer-motion";
 import {
   ShieldCheck, Zap, BarChart3, EyeOff,
-  ArrowRight, ChevronRight, Lock, Globe,
+  ArrowRight, ChevronRight, Lock, Globe as GlobeIcon,
   Layers, GitBranch, Sparkles,
 } from "lucide-react";
+import { Globe } from "@/components/ui/globe";
+import { useSplash } from "@/providers/SplashProvider";
+
 
 // ─── Scroll reveal hook ──────────────────────────────────────────────────────
 function useReveal(threshold = 0.15) {
@@ -338,6 +341,7 @@ export default function LandingPage() {
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 400], [0, -40]);
   const heroOpacity = useTransform(scrollY, [0, 300], [1, 0.6]);
+  const { isReady } = useSplash();
 
   return (
     <main className="z-content relative overflow-hidden">
@@ -351,14 +355,28 @@ export default function LandingPage() {
         <GradientOrb className="w-[700px] h-[500px] -top-40 left-1/2 -translate-x-1/2 bg-purple-700/[0.08]" />
         <GradientOrb className="w-[400px] h-[400px] top-1/2 -right-32 bg-blue-600/[0.05]" />
 
+        {/* Magic UI Globe Background */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={isReady ? { opacity: 0.45, scale: 1 } : { opacity: 0, scale: 0.8 }}
+          transition={{ duration: 1.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute inset-0 flex items-center justify-center overflow-hidden z-10"
+        >
+          <div className="relative w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] scale-[1.0] sm:scale-[1.1] translate-y-16">
+            <Globe />
+            {/* Ambient mask */}
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-gray-950 pointer-events-none" />
+          </div>
+        </motion.div>
+
         <motion.div
           style={{ y: heroY, opacity: heroOpacity }}
-          className="relative z-10 flex flex-col items-center text-center max-w-4xl mx-auto"
+          className="relative z-20 flex flex-col items-center text-center max-w-4xl mx-auto"
         >
           {/* Eyebrow */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
+            animate={isReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             className="flex items-center gap-2.5 mb-8 px-4 py-2 rounded-full"
             style={{
@@ -375,8 +393,8 @@ export default function LandingPage() {
           {/* Headline */}
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            animate={isReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
+            transition={{ duration: 0.7, delay: isReady ? 0.1 : 0, ease: [0.22, 1, 0.36, 1] }}
             className="heading-xl mb-6"
           >
             Tip creators.{" "}
@@ -396,8 +414,8 @@ export default function LandingPage() {
           {/* Subheading */}
           <motion.p
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            animate={isReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+            transition={{ duration: 0.6, delay: isReady ? 0.2 : 0, ease: [0.22, 1, 0.36, 1] }}
             className="mb-10 max-w-2xl"
             style={{
               color: "var(--text-secondary)",
@@ -406,7 +424,7 @@ export default function LandingPage() {
               fontWeight: 300,
             }}
           >
-            PrivyBag routes tips through a Vault PDA on Solana — breaking the
+            PrivyBag routes tips through a Vault PDA on Solana - breaking the
             direct on-chain link between fan and creator. Built for the{" "}
             <span style={{ color: "var(--text-primary)" }}>Bags.fm</span> ecosystem.
           </motion.p>
@@ -414,8 +432,8 @@ export default function LandingPage() {
           {/* CTAs */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            animate={isReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
+            transition={{ duration: 0.5, delay: isReady ? 0.3 : 0, ease: [0.22, 1, 0.36, 1] }}
             className="flex flex-wrap items-center gap-3 justify-center"
           >
             <Link href="#search" className="btn-primary text-sm">
@@ -431,8 +449,8 @@ export default function LandingPage() {
           {/* Trust line */}
           <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.5 }}
+            animate={isReady ? { opacity: 1 } : { opacity: 0 }}
+            transition={{ duration: 0.6, delay: isReady ? 0.5 : 0 }}
             className="flex items-center gap-2 mt-8"
             style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}
           >
@@ -444,9 +462,9 @@ export default function LandingPage() {
         {/* Dashboard preview */}
         <motion.div
           initial={{ opacity: 0, y: 48, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.9, delay: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          className="relative z-10 w-full max-w-lg mx-auto mt-16"
+          animate={isReady ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 48, scale: 0.97 }}
+          transition={{ duration: 0.9, delay: isReady ? 0.55 : 0, ease: [0.22, 1, 0.36, 1] }}
+          className="relative z-20 w-full max-w-lg mx-auto mt-16"
           style={{ filter: "drop-shadow(0 40px 80px rgba(109,40,217,0.2))" }}
         >
           <DashboardPreview />
@@ -455,9 +473,9 @@ export default function LandingPage() {
         {/* Scroll indicator */}
         <motion.div
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+          animate={isReady ? { opacity: 1 } : { opacity: 0 }}
+          transition={{ delay: isReady ? 1.2 : 0 }}
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-20"
         >
           <div
             className="w-5 h-8 rounded-full flex items-start justify-center pt-1.5"
@@ -618,7 +636,7 @@ export default function LandingPage() {
           >
             {[
               {
-                icon: Globe,
+                icon: GlobeIcon,
                 title: "Live on Devnet",
                 desc: "Fully deployed and functional on Solana Devnet. Real transactions, real privacy.",
               },

@@ -1,0 +1,13 @@
+allowBuilds:
+  '@lightprotocol/zk-compression-cli': true
+  '@stellar/stellar-sdk': true
+  bigint-buffer: true
+  blake-hash: true
+  bufferutil: true
+  esbuild: true
+  protobufjs: true
+  sharp: true
+  tiny-secp256k1: true
+  usb: true
+  utf-8-validate: true
+  yarn: true

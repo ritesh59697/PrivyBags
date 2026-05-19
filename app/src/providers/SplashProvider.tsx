@@ -1,8 +1,16 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, createContext, useContext, type ReactNode } from "react";
 import { AnimatePresence } from "framer-motion";
 import { SplashScreen } from "@/components/ui/SplashScreen";
+
+interface SplashContextType {
+  isReady: boolean;
+}
+
+const SplashContext = createContext<SplashContextType>({ isReady: false });
+
+export const useSplash = () => useContext(SplashContext);
 
 export function SplashProvider({ children }: { children: ReactNode }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -30,7 +38,7 @@ export function SplashProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <>
+    <SplashContext.Provider value={{ isReady }}>
       <AnimatePresence>
         {isVisible && <SplashScreen key="splash" />}
       </AnimatePresence>
@@ -39,9 +47,9 @@ export function SplashProvider({ children }: { children: ReactNode }) {
         We keep children hidden or blurred until the splash is gone 
         to ensure the reveal feels smooth.
       */}
-      <div className={`transition-opacity duration-700 ${isReady ? "opacity-100" : "opacity-0"}`}>
+      <div className={`transition-opacity duration-1000 ${isReady ? "opacity-100" : "opacity-0"}`}>
         {children}
       </div>
-    </>
+    </SplashContext.Provider>
   );
 }

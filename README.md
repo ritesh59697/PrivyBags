@@ -1,4 +1,4 @@
-# PrivyBag 🛡️
+# PrivyBag 
 
 > **Privacy-first tipping for Bags.fm creators on Solana**
 
